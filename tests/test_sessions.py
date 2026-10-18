@@ -58,9 +58,9 @@ class Sessions(unittest.TestCase):
             self.lua.execute('assert(load(...))', path.read_text())
 
     def test_orbit_grant_is_server_controlled(self):
-        self.run_lua("start(); assert(emitted[1][5]==nil); events['d-photomode:finish'](1); now=106; Config.Viewfinder.enabled=false; Config.Orbit.enabled=true; start(); local o=emitted[2][5]; assert(o.origin.x==10 and o.heading==90 and o.distance.max==6)")
+        self.run_lua("start(); assert(emitted[1][5]==nil); events['d-photomode:finish'](1); now=106; Config.Viewfinder.enabled=false; Config.Orbit.enabled=true; start(); local o=emitted[2][5]; assert(o.origin.x==10 and o.heading==90 and o.distance.max==10)")
     def test_viewfinder_receives_optional_server_orbit_capability(self):
-        self.run_lua("Config.Orbit.enabled=true; start(); assert(emitted[1][5].maxDistance==8)")
+        self.run_lua("Config.Orbit.enabled=true; start(); assert(emitted[1][5].maxDistance==13)")
     def test_denial_reports_specific_reason(self):
         for setting, reason in [('ace=false', 'ACE permission'), ('vehicle=4', 'vehicle'), ('alive=false', 'dead'), ("Config.AllowedJobs={'ambulance'}", 'current job')]:
             with self.subTest(setting=setting):

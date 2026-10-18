@@ -77,3 +77,11 @@ Status: actual game captures, live FiveManage key/upload, deployed inventory SQL
 - Test 0.5–6 m distance, −1–3 m height, full 360° orbit and fine steps (keyboard arrows on sliders) near floors/walls, indoors and under ceilings. Camera must respect collision and 8 m bound. Test with FINI enabled.
 - Escape, death, item loss and resource restart release focus and leave character/prop/animation/rendering clean in either view, including with pose disabled.
 - On the actual Windows/Linux host, capture and deliver a photo and reopen it after resource restart. Check saved records/journals. If capture fails, retain only the stage/error-code line; no keys/private provider bodies. Check writable resource data directory and disk capacity. The earlier generic warning is insufficient to determine its exact cause.
+
+## 0.4.1 smoothing / range QA (in-game pending)
+
+- Compare aiming and wheel zoom at 30/60/high FPS. Verify quick response without abrupt steps, jitter or long drift; exercise camera and self portraits with H settings open/closed.
+- Sweep sliders and mouse across the ±180° orbit seam; verify the shorter arc without spinning around. Roll ±45°, pitch ±89°, FOV 15–100°, distance 0.4–10 m and height −2–6 m must remain bounded. Retained configs require merging new limits.
+- Press shutter while zoom/aim/orbit is still easing: the uploaded photo must match the visible frame at press, with no easing during capture or resume toward the old target after capture. Verify failed uploads and retry too.
+- Orbit near walls/ceilings with rapid distance/angle/height changes: each interpolated position remains collision checked and within 13 m. Enable FINI for staging and record actual outcomes/performance.
+- Automated tests cover convergence, 30/60/144 FPS equivalent lens response, angular wrap, collision while easing, shutter freeze/UI synchronization and stopping settled eye-view camera writes. They do not measure native rendering latency or resmon.

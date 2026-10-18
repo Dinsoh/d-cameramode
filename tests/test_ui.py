@@ -83,11 +83,13 @@ with sync_playwright() as p:
     page.evaluate("window.postMessage({action:'prepareCapture',id:11},'*')")
     page.locator('#frame').wait_for(state='hidden')
     page.wait_for_function("calls.some(c=>c[0].endsWith('/captureReady')&&c[1].id===11)")
-    assert page.locator('#fov').input_value()=='35'
+    page.evaluate("window.postMessage({action:'framing',fov:36.2,tilt:2.1,angle:12.3,distance:3.21,height:1.23},'*')")
+    page.wait_for_function("document.getElementById('fov').value==='36.2'")
+    assert page.locator('#distance').input_value()=='3.21'
     page.evaluate("window.postMessage({action:'captureResult',ok:true,hidden:false},'*')")
     page.locator('#viewfinderHud').wait_for(state='visible')
     assert page.locator('#panel').is_hidden()
-    assert page.locator('#fov').input_value()=='35'
+    assert page.locator('#fov').input_value()=='36.2'
     page.evaluate("window.postMessage({action:'close'},'*')")
     page.locator('#frame').wait_for(state='hidden')
     print('PASS: clean viewfinder, lens sync, optional settings, caption typing, clean capture and lens preservation')

@@ -4,7 +4,7 @@ import unittest
 from lupa.lua54 import LuaRuntime
 ROOT=Path(__file__).resolve().parents[1]/'d-photomode'
 class Client(unittest.TestCase):
-    def setUp(self, first_person=False):
+    def setUp(self, first_person=False, smoothing=False):
         self.lua=LuaRuntime()
         self.lua.execute('''
         events, commands, callbacks, handlers, calls = {}, {}, {}, {}, {}
@@ -38,6 +38,7 @@ class Client(unittest.TestCase):
         function GetGameplayCamRot() return {x=2,y=0,z=30} end
         function IsRadarHidden() return false end
         function GetGameTimer() return clock end
+        function GetFrameTime() return deltaTime or 1/60 end
         function CreateCam() return 42 end
         function GetHashKey(model) return model end
         function IsModelInCdimage(model) return model=='prop_pap_camera_01' end
@@ -82,7 +83,7 @@ class Client(unittest.TestCase):
                 targetHeight=0.7,maxDistance=Config.MaxCameraDistance})
         end
         function SetCamRot(_,pitch,roll,yaw) camPitch=pitch; camYaw=yaw end
-        function SetCamFov(_,n) fov=n end
+        function SetCamFov(_,n) fov=n; lensWrites=(lensWrites or 0)+1 end
         function SetCamUseShallowDofMode() end
         function SetCamNearDof(_,n) nearFocus=n end
         function SetCamFarDof(_,n) farFocus=n end
@@ -111,13 +112,36 @@ class Client(unittest.TestCase):
         self.lua.execute((ROOT/'config.lua').read_text())
         if first_person == 'legacy_config': self.lua.execute('Config.Viewfinder=nil')
         elif not first_person: self.lua.execute('Config.Viewfinder.enabled=false')
+        if not smoothing: self.lua.execute('Config.Motion.enabled=false')
         self.lua.execute((ROOT/'client.lua').read_text())
+    def test_smooth_mouse_aim_and_zoom_converge_without_snapping(self):
+        self.setUp(True, True)
+        self.lua.execute("enter(); mouseX=1; scroll=241; tick(); assert(fov>68.5 and fov<70 and camYaw>22 and camYaw<30); mouseX=0; scroll=nil; local previous=fov; for i=1,90 do tick(); assert(fov<=previous); previous=fov end; assert(math.abs(fov-68.5)<0.001 and math.abs(camYaw-22)<0.001)")
+    def test_settled_eye_view_stops_writing_camera_settings(self):
+        self.setUp(True,True)
+        self.lua.execute("enter(); callbacks.update({fov=30},cb); for i=1,120 do tick() end; local settled=lensWrites; for i=1,120 do tick() end; assert(lensWrites==settled)")
+    def test_smoothing_is_frame_rate_independent(self):
+        values=[]
+        for rate in [30,60,144]:
+            self.setUp(True,True)
+            self.lua.execute("enter(); deltaTime=1/"+str(rate)+"; callbacks.update({fov=25,tilt=40},cb); assert(fov==70); for i=1,"+str(rate//2)+" do tick() end")
+            values.append((self.lua.globals().fov,self.lua.globals().camPitch))
+        self.assertLess(max(v[0] for v in values)-min(v[0] for v in values),0.00001)
+    def test_shutter_freezes_rendered_view_mid_transition(self):
+        self.setUp(True,True)
+        self.lua.execute("source=65535; enter(); callbacks.update({fov=20},cb); tick(); local framed=fov; assert(framed>20 and framed<70); callbacks.capture({},cb); assert(message.action=='framing' and message.fov==framed); events['d-photomode:prepareCapture'](1,9); for i=1,20 do tick() end; assert(fov==framed); events['d-photomode:captureResult'](1,9,true,'Printed'); for i=1,20 do tick() end; assert(fov==framed)")
+    def test_orbit_smoothing_rechecks_collision_at_rendered_positions(self):
+        self.setUp(True,True)
+        self.lua.execute("enterOrbit(); callbacks.update({mode='selfie'},cb); callbacks.update({distance=10,height=6,angle=30},cb); assert(math.abs(camera.y-2)<0.001); tick(); local d=math.sqrt(camera.x^2+camera.y^2); assert(d>2 and d<10); blocked=true; tick(); assert(math.sqrt(camera.x^2+camera.y^2)<1); blocked=false; for i=1,100 do tick() end; assert(math.abs(math.sqrt(camera.x^2+camera.y^2)-10)<0.001 and math.abs(camera.z-6.7)<0.001)")
+    def test_smooth_yaw_crosses_wrap_by_shortest_arc(self):
+        self.setUp(True,True)
+        self.lua.execute("enter(); mouseX=-40; tick(); local yaw=camYaw; assert(yaw>0 and yaw<30); mouseX=0; for i=1,90 do tick() end; assert(math.abs((camYaw+10+180)%360-180)<0.001)")
     def test_eye_level_view_opens_without_cursor_or_third_person_zoom(self):
         self.setUp(True)
         self.lua.execute("gameplayFov=30; enter(); assert(rendering and not focused and fov==70); assert(math.abs(camera.z-1.75)<0.001 and camera.x==0 and camera.y==0); assert(message.viewfinder)")
     def test_aim_clamps_pitch_and_scroll_changes_only_lens(self):
         self.setUp(True)
-        self.lua.execute("enter(); mouseX=1; mouseY=100; scroll=241; tick(); assert(fov==68 and invisible[12] and invisible[55]); assert(camera.x==0 and camera.y==0 and math.abs(camera.z-1.75)<0.001); assert(camPitch==-80 and camYaw~=30); commands.photomode_hide(); assert(focused and message.action=='settings' and message.open); local previous=fov; tick(); assert(fov==previous); commands.photomode_hide(); assert(not focused)")
+        self.lua.execute("enter(); mouseX=1; mouseY=100; scroll=241; tick(); assert(fov==68 and invisible[12] and invisible[55]); assert(camera.x==0 and camera.y==0 and math.abs(camera.z-1.75)<0.001); assert(camPitch==-89 and camYaw~=30); commands.photomode_hide(); assert(focused and message.action=='settings' and message.open); local previous=fov; tick(); assert(fov==previous); commands.photomode_hide(); assert(not focused)")
     def test_shutter_does_not_zoom_or_move_view_and_restores_aim(self):
         self.setUp(True)
         self.lua.execute("source=65535; enter(); scroll=241; tick(); assert(fov==68); callbacks.capture({},cb); events['d-photomode:prepareCapture'](1,9); mouseX=10; tick(); assert(fov==68 and math.abs(camera.z-1.75)<0.001); callbacks.captureReady({id=9},cb); events['d-photomode:captured'](1,9); events['d-photomode:captureResult'](1,9,true,'Printed'); assert(fov==68 and not focused); commands.photomode_exit(); assert(not rendering and propDeleted)")
@@ -146,13 +170,13 @@ class Client(unittest.TestCase):
             with self.subTest(condition=condition):
                 self.setUp(); self.lua.execute('enter(); '+condition+'; tick(); assert(destroyed and not focused and not rendering)')
     def test_bounded_input_and_grade_cleanup(self):
-        self.lua.execute("enter(); callbacks.update({fov=1000,filter=2},cb); assert(response.ok and fov==90 and graded); commands.photomode_exit(); assert(cleared)")
+        self.lua.execute("enter(); callbacks.update({fov=1000,filter=2},cb); assert(response.ok and fov==100 and graded); commands.photomode_exit(); assert(cleared)")
     def test_resource_stop_cleanup(self):
         self.lua.execute("enter(); handlers.onResourceStop('d-photomode'); assert(destroyed and not focused)")
     def test_unsolicited_grant_does_not_enter(self):
         self.lua.execute("events['d-photomode:grant'](1,180); assert(not rendering and calls[1][1]=='d-photomode:finish')")
     def test_orbit_presets_and_clamps(self):
-        self.lua.execute("enterOrbit(); assert(math.abs(camera.y-2)<0.001); callbacks.update({angle=180,distance=999,height=999},cb); assert(response.ok and math.abs(camera.y+6)<0.001 and math.abs(camera.z-3.7)<0.001)")
+        self.lua.execute("enterOrbit(); assert(math.abs(camera.y-2)<0.001); callbacks.update({angle=180,distance=999,height=999},cb); assert(response.ok and math.abs(camera.y+10)<0.001 and math.abs(camera.z-6.7)<0.001)")
     def test_collision_insets_camera(self):
         self.lua.execute("blocked=true; enterOrbit(); assert(rendering and math.abs(camera.y-0.8)<0.001)")
     def test_collision_rechecked_when_active(self):

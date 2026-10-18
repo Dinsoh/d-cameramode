@@ -2,6 +2,8 @@ local state, pending, viewing = nil, false, false
 local resource = GetCurrentResourceName()
 local viewfinder = Config.Viewfinder or {}
 local firstPerson = viewfinder.enabled ~= false
+local motion = Config.Motion or {}
+local pitchLimit = math.max(1.0, math.min(89.0, tonumber(viewfinder.pitch) or 89.0))
 
 local function closePhoto()
     if not viewing then return end
@@ -73,13 +75,14 @@ end
 local function orbitPosition(s)
     local o = s.orbit
     if not o then return end
-    local angle = math.rad(o.heading + s.angle)
+    local frame = s.render or s
+    local angle = math.rad(o.heading + frame.angle)
     local target = vector3(o.origin.x, o.origin.y, o.origin.z + o.targetHeight)
-    local desired = target + vector3(-math.sin(angle) * s.distance, math.cos(angle) * s.distance, s.height)
+    local desired = target + vector3(-math.sin(angle) * frame.distance, math.cos(angle) * frame.distance, frame.height)
     local anchor = vector3(o.origin.x, o.origin.y, o.origin.z)
     if #(desired - anchor) > o.maxDistance then error('Camera exceeds session radius') end
     -- Ignore the photographed ped, but test world, vehicles, objects and other peds.
-    -- Synchronous probe runs on input and at 4 Hz while active, never while idle.
+    -- Probe each rendered orbit movement and at 4 Hz when stationary; never outside a session.
     local probe = StartExpensiveSynchronousShapeTestLosProbe(target.x, target.y, target.z,
         desired.x, desired.y, desired.z, 511, s.ped, 7)
     local status, hit, endpoint = GetShapeTestResult(probe)
@@ -97,19 +100,63 @@ local function orbitPosition(s)
     local direction = target - position
     local horizontal = math.sqrt(direction.x * direction.x + direction.y * direction.y)
     SetCamCoord(s.cam, position.x, position.y, position.z)
-    s.rotation = { x = math.deg(math.atan(direction.z, horizontal)),
+    frame.rotation = { x = math.deg(math.atan(direction.z, horizontal)),
         z = math.deg(math.atan(-direction.x, direction.y)) }
 end
 
 local function apply(s)
-    SetCamFov(s.cam, s.fov)
-    SetCamRot(s.cam, s.rotation.x, s.tilt, s.rotation.z, 2)
+    local frame = s.render or s
+    SetCamFov(s.cam, frame.fov)
+    SetCamRot(s.cam, frame.rotation.x, frame.tilt, frame.rotation.z, 2)
     SetCamUseShallowDofMode(s.cam, s.dof)
     if s.dof then
         SetCamNearDof(s.cam, math.max(0.1, s.focus - 1.0))
         SetCamFarDof(s.cam, s.focus + 1.0)
         SetCamDofStrength(s.cam, s.dofStrength)
     end
+end
+
+-- Interpolate bounded lens/orbit parameters, then perform collision tests at
+-- the rendered orbit position. Never lerp world coordinates through a wall.
+local function smoothFrame(s)
+    local r = s.render
+    local dt = math.max(0.0, math.min(0.1, GetFrameTime()))
+    local function alpha(value, fallback)
+        return 1.0 - math.exp(-math.max(1.0, math.min(60.0, tonumber(value) or fallback)) * dt)
+    end
+    local aim, zoom, orbit = alpha(motion.response, 18.0), alpha(motion.zoomResponse, 12.0), alpha(motion.orbitResponse, 12.0)
+    local changed, orbitChanged = false, false
+    local function ease(current, target, amount, angular)
+        local delta = angular and ((target - current + 180.0) % 360.0 - 180.0) or target - current
+        if delta == 0 then return current end
+        changed = true
+        if math.abs(delta) < 0.001 then return target end
+        local value = current + delta * amount
+        return angular and ((value + 180.0) % 360.0 - 180.0) or value
+    end
+    r.fov = ease(r.fov, s.fov, zoom)
+    r.tilt = ease(r.tilt, s.tilt, aim)
+    if s.orbit then
+        local previousAngle, previousDistance, previousHeight = r.angle, r.distance, r.height
+        r.angle = ease(r.angle, s.angle, orbit, true)
+        r.distance = ease(r.distance, s.distance, orbit)
+        r.height = ease(r.height, s.height, orbit)
+        orbitChanged = r.angle ~= previousAngle or r.distance ~= previousDistance or r.height ~= previousHeight
+    else
+        r.rotation.x = ease(r.rotation.x, s.rotation.x, aim)
+        r.rotation.z = ease(r.rotation.z, s.rotation.z, aim, true)
+    end
+    if orbitChanged then orbitPosition(s); s.nextCollision = GetGameTimer() + 250 end
+    if changed then apply(s) end
+end
+
+local function freezeFraming(s)
+    if not s.render then return end
+    local r = s.render
+    s.fov, s.tilt = r.fov, r.tilt
+    s.angle, s.distance, s.height = r.angle, r.distance, r.height
+    if not s.selfie then s.rotation = {x = r.rotation.x, z = r.rotation.z} end
+    SendNUIMessage({action = 'framing', fov = s.fov, tilt = s.tilt, angle = s.angle, distance = s.distance, height = s.height})
 end
 
 RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
@@ -149,8 +196,12 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
         fov = entryFov, fovBounds = fovBounds, tilt = 0.0, dof = false, focus = 5.0,
         strength = Config.FilterStrength or 0.65, dofStrength = 0.5,
         radar = not IsRadarHidden(), hidden = false, settings = not firstPerson, compact = firstPerson, expires = GetGameTimer() + seconds * 1000 }
-    s.rotation = { x = math.max(-80.0, math.min(80.0, s.rotation.x)), z = s.rotation.z }
+    s.rotation = { x = math.max(-pitchLimit, math.min(pitchLimit, s.rotation.x)), z = s.rotation.z }
     s.eyeRotation = { x = s.rotation.x, z = s.rotation.z }
+    if motion.enabled ~= false then
+        s.render = {fov = s.fov, tilt = s.tilt, angle = s.angle, distance = s.distance, height = s.height,
+            rotation = {x = s.rotation.x, z = s.rotation.z}}
+    end
     state = s
     local ok, err = pcall(function()
         if not equipCamera(s) then return end
@@ -182,7 +233,7 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
                 if current ~= s.ped or IsEntityDead(current) or IsPedInAnyVehicle(current, true)
                     or IsPedRagdoll(current) or not DoesEntityExist(s.prop) or #(GetEntityCoords(current) - s.origin) > Config.MaxPedDisplacement
                     or GetGameTimer() >= s.expires then cleanup() break end
-                if s.orbit and GetGameTimer() >= s.nextCollision then
+                if s.orbit and not s.captureRequested and not s.captureId and GetGameTimer() >= s.nextCollision then
                     orbitPosition(s)
                     apply(s)
                     s.nextCollision = GetGameTimer() + 250
@@ -195,25 +246,27 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
                     if not s.selfie then SetEntityLocallyInvisible(s.ped) end
                     if not s.selfie or not s.pose then SetEntityLocallyInvisible(s.prop) end
                     if not s.settings and not s.captureRequested and not s.captureId then
-                        local speed = math.max(0.1, math.min(20.0, tonumber(viewfinder.sensitivity) or 8.0)) * s.fov / 70.0
+                        local speed = math.max(0.1, math.min(20.0, tonumber(viewfinder.sensitivity) or 8.0)) * (s.render and s.render.fov or s.fov) / 70.0
                         local dx, dy = GetDisabledControlNormal(0, 1), GetDisabledControlNormal(0, 2)
                         if s.selfie then
                             s.angle = ((s.angle - dx * speed + 180.0) % 360.0) - 180.0
                             s.height = math.max(s.orbit.height.min, math.min(s.orbit.height.max, s.height - dy * 0.1))
                             if dx ~= 0 or dy ~= 0 then
-                                orbitPosition(s)
+                                if not s.render then orbitPosition(s) end
                                 SendNUIMessage({action = 'orbitPosition', angle = s.angle, height = s.height})
                             end
                         else
                             s.rotation.z = (s.rotation.z - dx * speed) % 360
-                            s.rotation.x = math.max(-80.0, math.min(80.0, s.rotation.x - dy * speed))
+                            s.rotation.x = math.max(-pitchLimit, math.min(pitchLimit, s.rotation.x - dy * speed))
                         end
-                        local zoom = IsDisabledControlJustPressed(0, 241) and -2.0 or (IsDisabledControlJustPressed(0, 242) and 2.0 or 0)
+                        local step = s.render and math.max(0.2, math.min(5.0, tonumber(motion.zoomStep) or 1.5)) * s.fov / 70.0 or 2.0
+                        local zoom = IsDisabledControlJustPressed(0, 241) and -step or (IsDisabledControlJustPressed(0, 242) and step or 0)
                         s.fov = math.max(s.fovBounds.min, math.min(s.fovBounds.max, s.fov + zoom))
-                        if dx ~= 0 or dy ~= 0 or zoom ~= 0 then apply(s) end
+                        if not s.render and (dx ~= 0 or dy ~= 0 or zoom ~= 0) then apply(s) end
                         if zoom ~= 0 then SendNUIMessage({action = 'lens', fov = s.fov}) end
                     end
                 end
+                if s.render and not s.captureRequested and not s.captureId then smoothFrame(s) end
                 EnableControlAction(0, 249, true) -- voice
                 HideHudAndRadarThisFrame()
                 if s.dof then SetUseHiDof() end
@@ -297,6 +350,7 @@ RegisterNUICallback('update', function(data, cb)
                 else
                     s.orbit = nil
                     s.rotation = { x = s.eyeRotation.x, z = s.eyeRotation.z }
+                    if s.render then s.render.rotation = {x = s.rotation.x, z = s.rotation.z} end
                     SetCamCoord(s.cam, s.eyePosition.x, s.eyePosition.y, s.eyePosition.z)
                 end
                 s.selfie = selfie
@@ -347,6 +401,7 @@ RegisterNetEvent('d-photomode:closePhoto', function() if source == 65535 then cl
 RegisterNUICallback('capture', function(data, cb)
     local s = state
     if not s or s.captureRequested or s.captureId then cb({ok = false}) return end
+    freezeFraming(s)
     s.captureRequested = true
     TriggerServerEvent('d-photomode:capture', s.id, type(data) == 'table' and data.caption or '')
     SetTimeout(6000, function()

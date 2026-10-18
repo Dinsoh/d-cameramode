@@ -8,7 +8,9 @@ Config = {
     PrintMilliseconds = 1800,
     CaptionLength = 80,
     -- Fixed eye-level view; no flight or movement controls. H opens settings.
-    Viewfinder = { enabled = true, fov = 70.0, sensitivity = 8.0 },
+    Viewfinder = { enabled = true, fov = 70.0, sensitivity = 8.0, pitch = 89.0 },
+    -- Higher response values react faster; smoothing is frame-rate independent.
+    Motion = { enabled = true, response = 18.0, zoomResponse = 12.0, orbitResponse = 12.0, zoomStep = 1.5 },
     Prop = { model = 'prop_pap_camera_01', bone = 28422,
         offset = { x = 0.0, y = 0.0, z = 0.0 }, rotation = { x = 0.0, y = 0.0, z = 0.0 },
         dictionary = 'amb@world_human_paparazzi@male@base', animation = 'base' },
@@ -18,13 +20,13 @@ Config = {
     SessionSeconds = 180,
     StartCooldownSeconds = 5,
     MaxPedDisplacement = 1.5,
-    MaxCameraDistance = 8.0,
-    Fov = { min = 20.0, max = 90.0, default = 60.0, preserveGameplay = true },
-    MaxTilt = 15.0,
+    MaxCameraDistance = 13.0,
+    Fov = { min = 15.0, max = 100.0, default = 60.0, preserveGameplay = true },
+    MaxTilt = 45.0,
     FilterStrength = 0.65,
     -- Self portraits stay inside this bounded orbit; verify the expanded range with FINI.
-    Orbit = { enabled = true, distance = { min = 0.5, max = 6.0, default = 2.0 },
-        height = { min = -1.0, max = 3.0, default = 0.2 }, targetHeight = 0.7 },
+    Orbit = { enabled = true, distance = { min = 0.4, max = 10.0, default = 2.0 },
+        height = { min = -2.0, max = 6.0, default = 0.2 }, targetHeight = 0.7 },
     EnableDof = false, -- renderer dependent; validate with your graphics settings
     -- Camera ownership is the default access gate. Set true for an ACE-only staging test.
     RequireAce = false,

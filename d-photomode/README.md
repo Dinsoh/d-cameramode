@@ -1,6 +1,6 @@
 # d-photomode · Dinsoh Development
 
-Version 0.4.0 — inventory-based instant photography for We The People RP and QB-Core. Use a camera, frame the game view, capture it, and receive a unique photograph you can view, copy, give away or keep in supported QS storage. The camera controls from 0.2.x remain available.
+Version 0.4.1 — inventory-based instant photography for We The People RP and QB-Core. Use a camera, frame the game view, capture it, and receive a unique photograph you can view, copy, give away or keep in supported QS storage. The camera controls from 0.2.x remain available.
 
 Implemented against the supplied QS customization source and FiveManage's official V3 API. **Cloud tests pass; a real FiveM capture, live FiveManage authentication/upload, prop placement, QS database reload and FINI behavior still require staging QA.** Resmon/concurrency timings have not been measured. See [TEST_PLAN.md](TEST_PLAN.md).
 
@@ -48,7 +48,9 @@ Use the camera inventory item. It equips `prop_pap_camera_01` and opens a clean,
 
 In H → Camera, choose **Self portrait** to photograph yourself when `Orbit.enabled = true`. Switch **Hold camera pose** off for a natural stance; the prop is also hidden from your self portrait when the pose is off. Switching back to Camera restores your previous aiming direction. The pose can be enabled again without leaving the session.
 
-Self-portrait controls include 360° orbit, 0.5–6 m distance and −1–3 m height relative to the orbit target (new defaults), with 0.1° angle/roll and 0.01 m distance/height steps. Arrow keys on a focused slider give the smallest steps. Mouse aiming in Self portrait adjusts orbit angle/height; scroll still adjusts the lens. Collision and the server-granted 8 m radius bound the orbit. Existing configs retain their own ranges until updated.
+Self-portrait controls include 360° orbit, 0.4–10 m distance and −2–6 m height relative to the orbit target (new defaults), with 0.1° angle/roll and 0.01 m distance/height steps. Arrow keys on a focused slider give the smallest steps. Mouse aiming in Self portrait adjusts orbit angle/height; scroll still adjusts the lens. Collision and the server-granted 13 m radius bound the orbit. Existing configs retain their own ranges until updated.
+
+Aim, wheel zoom, roll and orbit sliders ease smoothly using frame-rate-independent response. Wheel steps become finer at longer zoom. The shutter freezes the current rendered framing and cancels pending easing, including if pressed mid-transition. Pitch reaches ±89°, roll ±45° and FOV 15–100°. In config, `Motion.response`, `zoomResponse` and `orbitResponse` control response speed (higher is quicker); `zoomStep` controls wheel increments. `Motion.enabled = false` disables easing. These are new defaults: merge the updated `Viewfinder`, `Motion`, `Fov`, `MaxTilt`, `Orbit` and `MaxCameraDistance` settings if retaining your config.
 
 Look contains 13 native filters, adjustable strength and optional DoF/focus/blur. Frame contains thirds/golden/center guides, letterbox ratios and an optional caption.
 

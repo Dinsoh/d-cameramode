@@ -129,6 +129,9 @@ window.addEventListener('message', ({ data }) => {
     takePhotograph();
   } else if (data.action === 'settings') {
     settingsOpen = Boolean(data.open); $('panel').hidden = !settingsOpen;
+  } else if (data.action === 'framing') {
+    for (const id of ['fov','tilt','angle','distance','height']) if (Number.isFinite(data[id])) $(id).value = data[id];
+    labels();
   } else if (data.action === 'orbitPosition') {
     $('angle').value = data.angle; $('height').value = data.height; labels();
   } else if (data.action === 'lens') {

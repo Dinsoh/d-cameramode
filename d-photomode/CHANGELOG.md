@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+- Smooth mouse aim, wheel zoom, roll and self-portrait orbit with frame-rate-independent easing and shortest-path yaw/angle wrap. Smaller proportional wheel steps improve precision at longer zoom.
+- Freeze the actual rendered view at shutter time, cancel remaining easing and sync the controls to the photographed framing; no capture drift or post-capture zoom continuation.
+- Expand defaults to ±89° pitch, ±45° roll, 15–100° FOV, 0.4–10 m orbit distance and −2–6 m height, inside a 13 m anchor radius. Collision is checked at interpolated orbit positions.
+- Configurable response/zoom step and optional smoothing toggle. Settled eye views stop unnecessary camera-setting writes. Live feel, expanded limits, performance and FINI outcomes still require in-game QA.
+
 ## 0.4.0
 - Use the installed `screencapture` resource's native serverCapture API directly. Request canvas-compatible `jpeg` encoding to avoid JPEG-labelled PNG captures, with a bounded 1920×1080 size preserving aspect ratio.
 - Eye-level item camera with mouse aiming, wheel zoom, compact viewfinder and optional settings panel; no flying or player movement. Initial lens is 70° and shutter preserves framing.
