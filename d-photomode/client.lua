@@ -63,7 +63,7 @@ local function apply(s)
     if s.dof then
         SetCamNearDof(s.cam, math.max(0.1, s.focus - 1.0))
         SetCamFarDof(s.cam, s.focus + 1.0)
-        SetCamDofStrength(s.cam, 0.5)
+        SetCamDofStrength(s.cam, s.dofStrength)
     end
 end
 
@@ -84,9 +84,18 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
     if #(position - origin) > Config.MaxCameraDistance then
         TriggerServerEvent('d-photomode:finish', id) return
     end
+    local entryFov = (Config.Fov.preserveGameplay ~= false) and GetGameplayCamFov() or Config.Fov.default
+    if type(entryFov) ~= 'number' or entryFov ~= entryFov or entryFov <= 0 or entryFov > 130 then
+        entryFov = Config.Fov.default
+    end
+    -- Include the entry view even when graphics/FOV settings exceed the configured
+    -- slider range, so starting/resetting photo mode never introduces a zoom jump.
+    local fovBounds = { min = math.min(Config.Fov.min, entryFov),
+        max = math.max(Config.Fov.max, entryFov), default = entryFov }
     local s = { id = id, ped = ped, origin = origin, orbit = orbit, angle = 0.0,
         distance = orbit and orbit.distance.default, height = orbit and orbit.height.default, nextCollision = 0, rotation = GetGameplayCamRot(2),
-        fov = Config.Fov.default, tilt = 0.0, dof = false, focus = 5.0,
+        fov = entryFov, fovBounds = fovBounds, tilt = 0.0, dof = false, focus = 5.0,
+        strength = Config.FilterStrength or 0.65, dofStrength = 0.5,
         radar = not IsRadarHidden(), hidden = false, expires = GetGameTimer() + seconds * 1000 }
     state = s
     local ok, err = pcall(function()
@@ -99,7 +108,7 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
         RenderScriptCams(true, false, 0, true, false)
         SetNuiFocus(true, true)
         SetNuiFocusKeepInput(false)
-        SendNUIMessage({ action = 'open', fov = Config.Fov, tilt = Config.MaxTilt,
+        SendNUIMessage({ action = 'open', fov = fovBounds, strength = Config.FilterStrength or 0.65, tilt = Config.MaxTilt,
             filters = Config.Filters, dof = Config.EnableDof, hideKey = Config.HideKey, orbit = orbit or false })
     end)
     if not ok then
@@ -171,9 +180,11 @@ RegisterNUICallback('update', function(data, cb)
         if not n or n ~= n or n == math.huge or n == -math.huge then return fallback end
         return math.max(lo, math.min(hi, n))
     end
-    s.fov = number(data.fov, Config.Fov.min, Config.Fov.max, s.fov)
+    s.fov = number(data.fov, s.fovBounds.min, s.fovBounds.max, s.fov)
     s.tilt = number(data.tilt, -Config.MaxTilt, Config.MaxTilt, s.tilt)
     s.focus = number(data.focus, 1.0, 50.0, s.focus)
+    s.strength = number(data.strength, 0.0, 1.0, s.strength)
+    s.dofStrength = number(data.dofStrength, 0.0, 1.0, s.dofStrength)
     s.dof = Config.EnableDof and data.dof == true
     if s.orbit then
         s.angle = number(data.angle, -180.0, 180.0, s.angle)
@@ -182,12 +193,18 @@ RegisterNUICallback('update', function(data, cb)
     end
     local index = number(data.filter, 1, #Config.Filters, 1)
     local preset = Config.Filters[math.floor(index)]
-    if preset and preset.modifier then
-        SetExtraTimecycleModifier(preset.modifier)
-        SetExtraTimecycleModifierStrength(1.0)
-        s.filter = true
-    elseif s.filter then ClearExtraTimecycleModifier() s.filter = false end
-    local ok = pcall(function() orbitPosition(s) apply(s) end)
+    local ok = pcall(function()
+        if preset and preset.modifier then
+            if s.modifier ~= preset.modifier then SetExtraTimecycleModifier(preset.modifier) end
+            SetExtraTimecycleModifierStrength(s.strength)
+            s.modifier, s.filter = preset.modifier, true
+        elseif s.filter then
+            ClearExtraTimecycleModifier()
+            s.modifier, s.filter = nil, false
+        end
+        orbitPosition(s)
+        apply(s)
+    end)
     if not ok then cleanup(s.endReason or 'Photo controls could not be applied') end
     cb({ ok = ok })
 end)

@@ -30,6 +30,7 @@ class Client(unittest.TestCase):
         local v={__sub=function() return setmetatable({},{__len=function() return displacement end}) end}
         function GetEntityCoords() return setmetatable({},v) end
         GetGameplayCamCoord=GetEntityCoords
+        function GetGameplayCamFov() return gameplayFov or 70.0 end
         function GetGameplayCamRot() return {x=2,y=0,z=30} end
         function IsRadarHidden() return false end
         function GetGameTimer() return clock end
@@ -60,6 +61,10 @@ class Client(unittest.TestCase):
         function SetCamRot() end
         function SetCamFov(_,n) fov=n end
         function SetCamUseShallowDofMode() end
+        function SetCamNearDof(_,n) nearFocus=n end
+        function SetCamFarDof(_,n) farFocus=n end
+        function SetCamDofStrength(_,n) blur=n end
+        function SetUseHiDof() end
         function SetCamActive() end
         function RenderScriptCams(on) rendering=on end
         function SetNuiFocus(on) focused=on end
@@ -68,8 +73,8 @@ class Client(unittest.TestCase):
         function DestroyCam() destroyed=true end
         function DisplayRadar(on) radar=on end
         function ClearExtraTimecycleModifier() cleared=true end
-        function SetExtraTimecycleModifier() graded=true end
-        function SetExtraTimecycleModifierStrength() end
+        function SetExtraTimecycleModifier() graded=true; gradeChanges=(gradeChanges or 0)+1 end
+        function SetExtraTimecycleModifierStrength(n) gradeStrength=n end
         function Wait() coroutine.yield() end
         function CreateThread(fn) worker=coroutine.create(fn); assert(coroutine.resume(worker)) end
         function IsPedRagdoll() return false end
@@ -89,7 +94,7 @@ class Client(unittest.TestCase):
             with self.subTest(condition=condition):
                 self.setUp(); self.lua.execute('enter(); '+condition+'; tick(); assert(destroyed and not focused and not rendering)')
     def test_bounded_input_and_grade_cleanup(self):
-        self.lua.execute("enter(); callbacks.update({fov=1000,filter=2},cb); assert(response.ok and fov==80 and graded); commands.photomode_exit(); assert(cleared)")
+        self.lua.execute("enter(); callbacks.update({fov=1000,filter=2},cb); assert(response.ok and fov==90 and graded); commands.photomode_exit(); assert(cleared)")
     def test_resource_stop_cleanup(self):
         self.lua.execute("enter(); handlers.onResourceStop('d-photomode'); assert(destroyed and not focused)")
     def test_unsolicited_grant_does_not_enter(self):
@@ -112,4 +117,12 @@ class Client(unittest.TestCase):
         self.lua.execute("lib=nil; events['d-photomode:denied']('ACE denied'); assert(notification=='ACE denied' and not rendering)")
     def test_exit_notification_does_not_interrupt_cleanup(self):
         self.lua.execute("lib=nil; enter(); events['d-photomode:stop']('Session ended'); assert(notification=='Session ended' and destroyed and not focused and not rendering)")
+    def test_entry_preserves_gameplay_fov_and_sends_reset_value(self):
+        self.lua.execute("gameplayFov=72.5; enter(); assert(fov==72.5 and message.fov.default==72.5)")
+    def test_wide_entry_fov_does_not_snap_to_configured_max(self):
+        self.lua.execute("gameplayFov=100; enter(); assert(fov==100 and message.fov.max==100); callbacks.update({focus=2},cb); assert(fov==100)")
+    def test_focus_and_blur_do_not_change_zoom(self):
+        self.lua.execute("Config.EnableDof=true; enter(); callbacks.update({dof=true,focus=2,dofStrength=99},cb); assert(response.ok and fov==70 and nearFocus==1 and farFocus==3 and blur==1)")
+    def test_filter_strength_is_clamped_without_reloading_grade(self):
+        self.lua.execute("enter(); callbacks.update({filter=2,strength=99},cb); assert(gradeStrength==1 and gradeChanges==1); callbacks.update({filter=2,strength=-3},cb); assert(gradeStrength==0 and gradeChanges==1); callbacks.update({filter=1},cb); assert(cleared)")
 if __name__=='__main__': unittest.main()

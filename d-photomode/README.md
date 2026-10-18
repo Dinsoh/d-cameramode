@@ -1,6 +1,6 @@
 # d-photomode · Dinsoh Development
 
-Anchored RP photography for QB-Core. Version 0.2.1, staging release.
+Anchored RP photography for QB-Core. Version 0.2.2, staging release.
 
 ## FINI assessment
 FINI's deployed camera policy is unknown. Scripted camera creation, local grading and DoF still need testing with FINI enabled on a normal player account. Anchoring reduces scope; it does not establish anticheat compatibility. No bypass, detection manipulation, whitelist integration or safety guarantee is included. Orbit controls are included but disabled by default; anchored-mode testing does not establish orbit compatibility. Access defaults to ACE restricted for staging; do not open access before QA.
@@ -23,9 +23,16 @@ Use your existing principal/group assignments or grant a specific tester princip
 ## Controls and features
 `/photomode` or F7 enters/exits. Escape exits. H hides/restores the entire overlay, including guides/bars. Change keyboard bindings in FiveM settings; config keys set initial defaults. When NUI is focused its hide shortcut uses the configured key name, so use the Hide overlay button if you rebind the game shortcut.
 
-Compose your normal gameplay camera before entry: with orbit disabled, position and heading remain anchored, with FOV (20–80°), roll (±15°), thirds grid, cinema bars and local grade presets. No player repositioning, collision changes, invisibility, spectator mode or freecam. Use your usual screenshot tool; there is no capture/upload service. For cinema bars in screenshots retain the overlay; fully clean screenshots use H. DoF/focus is optional, off by default and renderer dependent. Unsupported grading can be removed from Config.Filters. Exposure and poses are not included: there is no reliable general-purpose exposure control or verified FINI allowance here.
+Compose your normal gameplay camera before entry: with orbit disabled, position and heading remain anchored, with FOV (20–90° by default), roll (±15°), thirds/golden/center guides, letterbox ratios and 13 local filter choices. No player repositioning, collision changes, invisibility, spectator mode or freecam. Use your usual screenshot tool; there is no capture/upload service. For cinema bars in screenshots retain the overlay; fully clean screenshots use H. DoF/focus is optional, off by default and renderer dependent. Focus distance changes blur range only, independently of zoom; blur strength is adjustable when DoF is enabled. Unsupported grading can be removed from Config.Filters. Exposure and poses are not included: there is no reliable general-purpose exposure control or verified FINI allowance here.
 
 Sessions last 180 seconds by default and starts are rate limited. Server validates online player, ACE/job access, death/laststand, on-foot state and displacement. Server checks active sessions once per second; client handles local death, movement, vehicle/ragdoll, timeout and resource stop. One session per player, no camera-coordinate broadcast, SQL or inventory effects. These checks do not secure a locally modified client or implement an anticheat.
+
+### Zoom, filters and framing
+Entry and Reset preserve the current gameplay camera FOV by default, avoiding an initial zoom jump. The starting value is included in the slider range when graphics settings put it outside configured bounds. Set `Fov.preserveGameplay = false` to use the configured default instead. Zoom is labeled in degrees; lower FOV magnifies the scene.
+
+Camera contains orbit controls, zoom and roll; Look contains filters, intensity and optional DoF/focus/blur; Frame contains guides and letterboxing. There are 13 native looks including Natural, Cinema, black-and-white, vivid/muted, contrast, brightness and desaturated looks. Filter strength is adjustable and disabled for Natural. Only one native grade is active at a time; there is no arbitrary photo-editor effect stacking. Modifier names were verified against GTA timecycle data, not visually tested in this server. Remove any look incompatible with your graphics pack.
+
+Guides are thirds, golden ratio and center cross. Letterbox/pillarbox masks frame 2.39:1, 1.85:1, 16:9 or square compositions without stretching the game view. They are preview overlays, not an exported image crop. H still hides all resource overlays. No camera-item, upload or print flow is included on main yet; the Polaroid branch tracks that integration.
 
 ## Player photography / constrained orbit (staging)
 The owner reports the anchored build working in server testing. Orbit is a separate behavior requiring its own FINI-enabled test.
