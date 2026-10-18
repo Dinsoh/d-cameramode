@@ -17,7 +17,10 @@ class Client(unittest.TestCase):
         function SetTimeout() end
         function GetCurrentResourceName() return 'd-photomode' end
         function TriggerServerEvent(n,...) table.insert(calls,{n,...}) end
-        function TriggerEvent() end
+        function TriggerEvent() error('QB notification path must not be used') end
+        function BeginTextCommandThefeedPost() end
+        function AddTextComponentSubstringPlayerName(text) notification=text end
+        function EndTextCommandThefeedPostTicker() end
         function PlayerPedId() return 12 end
         function IsEntityDead() return dead end
         function IsPedInAnyVehicle() return inside end
@@ -109,4 +112,8 @@ class Client(unittest.TestCase):
         self.lua.execute("source=65535; events['d-photomode:viewPhoto']({id='photo',url='https://photos.example.test/test.jpg'}); assert(focused and message.action=='photo'); handlers.onResourceStop('d-photomode'); assert(not focused and message.action=='closePhoto')")
     def test_local_photo_event_rejected(self):
         self.lua.execute("source=0; events['d-photomode:viewPhoto']({id='photo',url='https://photos.example.test/test.jpg'}); assert(not focused)")
+    def test_denial_does_not_require_qb_notify_or_lib(self):
+        self.lua.execute("lib=nil; events['d-photomode:denied']('ACE denied'); assert(notification=='ACE denied' and not rendering)")
+    def test_exit_notification_does_not_interrupt_cleanup(self):
+        self.lua.execute("lib=nil; enter(); events['d-photomode:stop']('Session ended'); assert(notification=='Session ended' and destroyed and not focused and not rendering)")
 if __name__=='__main__': unittest.main()
