@@ -12,4 +12,10 @@
 <div class="row"><label><input id="showGrid" type="checkbox"> Thirds grid</label><label><input id="showBars" type="checkbox"> Cinema bars</label></div>
 <section id="depth" hidden><label class="row"><span>Depth of field</span><input id="dof" type="checkbox"></label><label>Focus distance <output id="focusValue"></output><input id="focus" type="range" min="1" max="50" step="0.5" value="5"></label></section>
 <footer><button id="hide">Hide overlay</button><button id="reset">Reset</button><p id="hint"></p><p id="error" role="status" hidden>Control unavailable. Press Escape to exit.</p></footer>
-</main></div><script src="app.js"></script></body></html>
+</main></div><div id="photoViewer" hidden role="dialog" aria-modal="true" aria-labelledby="photoTitle">
+<article class="polaroid"><div class="photo-top"><h2 id="photoTitle">Photograph</h2><button id="photoClose" aria-label="Close photograph">×</button></div>
+<div class="photo-image"><img id="photoImage" alt="Printed photograph"><p id="photoLoadError" hidden>This photograph could not be loaded.</p></div>
+<div class="photo-details"><p id="photoCaption"></p><p><span id="photoPhotographer"></span><time id="photoDate"></time></p></div>
+</article><div class="photo-tools"><button id="photoCopy">Copy Image Link</button><button id="photoDone">Close</button><p id="photoCopyStatus" role="status" aria-live="polite"></p>
+<label id="photoFallback" hidden>Image link<input id="photoLink" type="text" readonly spellcheck="false"></label><p id="photoPublicNotice">Anyone with this public link can view the photograph.</p></div></div>
+<script src="app.js"></script><script src="photo.js"></script></body></html>

@@ -1,7 +1,16 @@
-local state, pending = nil, false
+local state, pending, viewing = nil, false, false
 local resource = GetCurrentResourceName()
 
+local function closePhoto()
+    if not viewing then return end
+    viewing = false
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'closePhoto' })
+end
+
 local function cleanup(reason)
+    closePhoto()
     local s = state
     state, pending = nil, false
     if not s then return end
@@ -134,6 +143,7 @@ RegisterNetEvent('d-photomode:denied', function()
 end)
 
 RegisterCommand(Config.Command, function()
+    if viewing then closePhoto() return end
     if state then cleanup() return end
     if pending then return end
     pending = true
@@ -184,3 +194,16 @@ RegisterNUICallback('update', function(data, cb)
     cb({ ok = ok })
 end)
 AddEventHandler('onResourceStop', function(name) if name == resource or name == 'qb-core' then cleanup() end end)
+
+-- This display event is for the authoritative inventory/photo-record handler only.
+-- No client request to view by ID is registered until inventory ownership can be checked.
+RegisterNetEvent('d-photomode:viewPhoto', function(photo)
+    if source ~= 65535 or type(photo) ~= 'table' or type(photo.id) ~= 'string'
+        or type(photo.url) ~= 'string' or not photo.url:match('^https://[%w%.%-]+/') then return end
+    cleanup()
+    viewing = true
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'photo', photo = photo })
+end)
+RegisterNUICallback('closePhoto', function(_, cb) closePhoto() cb({ ok = true }) end)

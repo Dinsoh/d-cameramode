@@ -1,5 +1,7 @@
 # d-photomode · Dinsoh Development
 
+**Polaroid integration is in progress on this branch.** See [integration status and prerequisites](POLAROID_INTEGRATION.md). Existing camera functionality remains available; usable camera/photo items and film transactions are not wired yet.
+
 Anchored RP photography for QB-Core. Version 0.2.0, staging release.
 
 ## FINI assessment

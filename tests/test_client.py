@@ -105,4 +105,8 @@ class Client(unittest.TestCase):
                 self.setUp(); self.lua.execute(condition+'; enterOrbit(); assert(destroyed and not focused and not rendering)')
     def test_bad_numbers_keep_valid_orbit(self):
         self.lua.execute("enterOrbit(); callbacks.update({angle='nan',distance='bad',height=math.huge},cb); assert(response.ok and math.abs(camera.y-2)<0.001 and math.abs(camera.z-0.9)<0.001)")
+    def test_photo_viewer_focus_and_resource_stop(self):
+        self.lua.execute("source=65535; events['d-photomode:viewPhoto']({id='photo',url='https://photos.example.test/test.jpg'}); assert(focused and message.action=='photo'); handlers.onResourceStop('d-photomode'); assert(not focused and message.action=='closePhoto')")
+    def test_local_photo_event_rejected(self):
+        self.lua.execute("source=0; events['d-photomode:viewPhoto']({id='photo',url='https://photos.example.test/test.jpg'}); assert(not focused)")
 if __name__=='__main__': unittest.main()
