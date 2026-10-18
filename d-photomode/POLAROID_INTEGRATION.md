@@ -5,7 +5,7 @@ This branch prepares a Polaroid viewer and a screenshot-basic/local-storage back
 ## Prerequisites still needed
 
 - The installed QS-Inventory version and its supported usable-item, inventory lookup, add/remove, capacity, slot and unique metadata APIs. Provide relevant unencrypted integration/customization files or version-matched official documentation. Confirm whether per-item metadata is `info` or another field and how it survives transfers/storage.
-- Existing image hosting details, if any. No credentials are needed in chat. There is no image host or inventory resource in this cloud checkout.
+- The owner confirms FiveManage as the existing host. Its upload API/integration is not available in this checkout, and the official docs domain is inaccessible from this cloud environment. Provide the supported server-upload docs or the relevant LB Phone upload integration with credentials redacted. Do not paste API keys. FiveManage is the target provider; the local backend below is only a prepared fallback, not a replacement selected for the live server.
 
 Once those are known, connect camera ownership to session entry/capture, implement single-use capture leases, overlay-hide acknowledgement before server capture, film/print delivery with recovery and capacity handling, item ownership checks on view, prop/animation cleanup and item assets. These are outstanding work, not completed integrations. The pending end-to-end QA is: use item → frame → capture/upload → print → receive item → view/copy → transfer/store → reopen after restart, including failures and duplicates.
 
@@ -23,7 +23,7 @@ Optional self-hosted storage uses the existing FiveM resource HTTP route `/d-pho
 set d_photomode_public_base_url "https://YOUR_REAL_HOST/d-photomode/photos/"
 ```
 
-The example host is illustrative, not a working provider. Do not use a signed/temporary URL or embed credentials. Empty/unconfigured base URL disables capture and serving. No external provider was selected or contacted. You may use an existing durable host instead once its supported upload/verification API is supplied.
+The example host is illustrative, not a working provider. Do not use a signed/temporary URL or embed credentials. Empty/unconfigured base URL disables capture and serving. FiveManage has been identified as the intended provider but its API has not been wired or contacted. You may use an existing durable host instead once its supported upload/verification API is supplied.
 
 Back up `d-photomode/data/photos/`, keep it on persistent disk across resource upgrades, and do not replace it with the code checkout. Set a disk quota, monitor disk space and rate-limit/cache the public JPEG route at the HTTPS proxy. Backups must include images and their matching JSON. There is no database migration because storage uses per-photo records. Cross-system inventory transaction durability still depends on the pending QS integration.
 

@@ -24,3 +24,5 @@ Target negligible idle overhead for 300–320 concurrent players. Lua 5.4, ox_li
 Do not proceed with anticheat-sensitive movement until compatibility is demonstrated. Ask for FINI documentation or owner-approved test results if needed.
 
 Owner clarification: wtp-banking is visual UI reference only. Do not use its camera implementation. Developer branding: Dinsoh Development.
+
+Current extension scope: see POLAROID_REQUEST.md. Existing hosting is FiveManage; inventory is QS-Inventory. The owner offers its ZIP for actual API inspection. Do not substitute guessed inventory exports or expose the upload key.
