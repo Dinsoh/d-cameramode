@@ -1,7 +1,7 @@
 """Mocked client lifecycle checks. Does not validate engine native behavior."""
 from pathlib import Path
 import unittest
-from lupa import LuaRuntime
+from lupa.lua54 import LuaRuntime
 ROOT=Path(__file__).resolve().parents[1]/'d-photomode'
 class Client(unittest.TestCase):
     def setUp(self):
@@ -35,6 +35,25 @@ class Client(unittest.TestCase):
         function IsRadarHidden() return false end
         function GetGameTimer() return clock end
         function CreateCam() return 42 end
+        function GetHashKey() return 1 end
+        function IsModelInCdimage() return true end
+        function IsModelValid() return true end
+        function RequestModel() end
+        function RequestAnimDict() end
+        function HasModelLoaded() return true end
+        function HasAnimDictLoaded() return true end
+        function CreateObject() propDeleted=false; return 55 end
+        function DoesEntityExist(entity) return entity~=55 or not propDeleted end
+        function SetEntityCollision() end
+        function AttachEntityToEntity() end
+        function GetPedBoneIndex() return 1 end
+        function SetModelAsNoLongerNeeded() end
+        function TaskPlayAnim() pose=true end
+        function NetworkGetNetworkIdFromEntity() return 500 end
+        function DeleteEntity() propDeleted=true end
+        function StopAnimTask() pose=false end
+        function RemoveAnimDict() end
+        function PlaySoundFrontend() sounds=(sounds or 0)+1 end
         function DoesCamExist() return true end
         function SetCamCoord(_,x,y,z) camera={x=x,y=y,z=z} end
         local vm={}
@@ -129,4 +148,8 @@ class Client(unittest.TestCase):
         self.lua.execute("Config.EnableDof=true; enter(); callbacks.update({dof=true,focus=2,dofStrength=99},cb); assert(response.ok and fov==70 and nearFocus==1 and farFocus==3 and blur==1)")
     def test_filter_strength_is_clamped_without_reloading_grade(self):
         self.lua.execute("enter(); callbacks.update({filter=2,strength=99},cb); assert(gradeStrength==1 and gradeChanges==1); callbacks.update({filter=2,strength=-3},cb); assert(gradeStrength==0 and gradeChanges==1); callbacks.update({filter=1},cb); assert(cleared)")
+    def test_capture_hides_focus_and_only_authorizes_ready_once(self):
+        self.lua.execute("source=65535; enter(); callbacks.capture({caption='Test'},cb); assert(response.ok); events['d-photomode:prepareCapture'](1,9); assert(not focused and message.action=='prepareCapture'); callbacks.captureReady({id=9},cb); callbacks.captureReady({id=9},cb); assert(sounds==1); local count=0;for _,c in ipairs(calls) do if c[1]=='d-photomode:captureReady' then count=count+1 end end;assert(count==1); events['d-photomode:captureResult'](1,9,true,'Printed');assert(focused and message.action=='captureResult')")
+    def test_capture_blocks_controls_and_exit_removes_prop_and_pose(self):
+        self.lua.execute("source=65535; enter(); callbacks.capture({},cb); events['d-photomode:prepareCapture'](1,9); callbacks.update({fov=20},cb);assert(not response.ok and fov==70);commands.photomode_exit();assert(propDeleted and not pose and not focused)")
 if __name__=='__main__': unittest.main()

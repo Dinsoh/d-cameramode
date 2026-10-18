@@ -40,6 +40,17 @@ with sync_playwright() as p:
     page.set_viewport_size({'width':1280,'height':720})
     bounds=page.locator('#panel').bounding_box(); assert bounds['y']>=0 and bounds['y']+bounds['height']<=720
     page.screenshot(path='/workspace/photomode-ui.png',omit_background=True)
+    page.locator('#capture').click(); page.wait_for_timeout(150)
+    assert page.evaluate("calls.some(c=>c[0].endsWith('/capture'))")
+    page.evaluate("window.postMessage({action:'prepareCapture',id:10},'*')")
+    page.locator('#frame').wait_for(state='hidden'); page.wait_for_timeout(100)
+    assert page.evaluate("calls.some(c=>c[0].endsWith('/captureReady')&&c[1].id===10)")
+    assert page.locator('#captureStatus').is_hidden()
+    page.evaluate("window.postMessage({action:'captured'},'*')"); page.locator('#captureStatus').wait_for(state='visible')
+    page.evaluate("window.postMessage({action:'printing',duration:1800},'*')"); page.wait_for_function("document.getElementById('captureStatus').classList.contains('printing')")
+    page.evaluate("window.postMessage({action:'captureResult',ok:true,message:'Photograph printed.',hidden:false},'*')")
+    page.locator('#frame').wait_for(state='visible'); assert page.locator('#capture').is_enabled()
+    assert page.locator('#captureMessage').inner_text()=='Photograph printed.'
     page.evaluate("window.postMessage({action:'close'},'*')"); page.locator('#frame').wait_for(state='hidden')
     print('PASS: UI open/update, grid, reset, hide/restore, exit, 720p fit, close')
     b.close()

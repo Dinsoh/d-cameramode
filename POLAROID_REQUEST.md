@@ -147,4 +147,4 @@ Also check cancellation, upload failure, full inventory, duplicate requests, and
 
 Keep the implementation appropriate to the existing resource. Avoid unrelated features or unnecessary rewrites.
 
-Owner clarification: camera must be a QS-Inventory item; existing hosting is FiveManage. Preserve tested controls, correct initial FOV, and provide native filter customization. Installed QS APIs and FiveManage upload integration remain to be inspected from supplied files/docs.
+Owner clarification: camera must be a QS-Inventory item; existing hosting is FiveManage. Preserve tested controls, correct initial FOV, and provide native filter customization. The supplied readable QS customization files and official FiveManage V3 documentation have now been inspected; see d-photomode/POLAROID_INTEGRATION.md for evidence and staging limits.

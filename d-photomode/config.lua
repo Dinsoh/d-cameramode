@@ -1,5 +1,15 @@
 Config = {
     Command = 'photomode',
+    CaptureKey = 'RETURN',
+    InventoryResource = 'qs-inventory',
+    Items = { camera = 'polaroid_camera', photo = 'polaroid_photo', film = 'polaroid_film' },
+    RequireFilm = true,
+    CaptureCooldownSeconds = 10,
+    PrintMilliseconds = 1800,
+    CaptionLength = 80,
+    Prop = { model = 'prop_pap_camera', bone = 28422,
+        offset = { x = 0.0, y = 0.0, z = 0.0 }, rotation = { x = 0.0, y = 0.0, z = 0.0 },
+        dictionary = 'amb@world_human_paparazzi@male@base', animation = 'base' },
     Key = 'F7',
     HideKey = 'H',
     ExitKey = 'ESCAPE',
@@ -14,8 +24,8 @@ Config = {
     Orbit = { enabled = false, distance = { min = 1.0, max = 3.0, default = 2.0 },
         height = { min = -0.4, max = 1.5, default = 0.2 }, targetHeight = 0.7 },
     EnableDof = false, -- renderer dependent; validate with your graphics settings
-    -- ACE restricted by default for staged FINI testing. Set false for public use after QA.
-    RequireAce = true,
+    -- Camera ownership is the default access gate. Set true for an ACE-only staging test.
+    RequireAce = false,
     Ace = 'd-photomode.use',
     AllowedJobs = {}, -- empty means any job; server checks current QB-Core job
     -- Native modifier names verified against GTA timecycle data. Appearance still

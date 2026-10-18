@@ -1,48 +1,45 @@
-# Polaroid integration — work in progress
+# Integration evidence and durability
 
-This branch prepares a Polaroid viewer and a screenshot-basic/local-storage backend. It does **not** yet deliver camera usable items, film transactions, printing rewards, or ownership-checked inventory viewing. No item definitions, inventory exports or success semantics have been guessed. Existing photography remains available. Do not deploy this branch as a completed Polaroid system.
+## QS source inspected
 
-## Prerequisites still needed
+The privately supplied `inv.zip` was inspected locally and is not included in Git or the release. No attempt was made to decrypt escrowed files. Its manifest/version was not supplied, so compatibility is scoped to the readable customization source, not an invented QS version claim.
 
-- The installed QS-Inventory version and its supported usable-item, inventory lookup, add/remove, capacity, slot and unique metadata APIs. Provide relevant unencrypted integration/customization files or version-matched official documentation. Confirm whether per-item metadata is `info` or another field and how it survives transfers/storage.
-- The owner confirms FiveManage as the existing host. Its upload API/integration is not available in this checkout, and the official docs domain is inaccessible from this cloud environment. Provide the supported server-upload docs or the relevant LB Phone upload integration with credentials redacted. Do not paste API keys. FiveManage is the target provider; the local backend below is only a prepared fallback, not a replacement selected for the live server.
+- `server/custom/misc/AddItem.lua`: `AddItem(source, item, amount, slot, info, data, created, lastinventory, disableAutoShowBox)` is exported. It enforces configured slots/weight, stores `info` and updates the framework before successful return. Some failure branches return a notification result; this integration verifies snapshot outcomes instead of treating any truthy return as success.
+- `server/custom/misc/RemoveItem.lua`: exported `RemoveItem(source, item, amount, slot, metadata, disableAutoShowBox)`. This integration validates the exact film slot/name before calling and checks the resulting quantity.
+- `server/custom/framework/qb.lua`: reads `QBCore.Shared.Items` and synchronizes `player.PlayerData.items` using `SetPlayerData('items', items)`.
+- `shared/inventory.lua`: `unique` and `stack` control stacking; metadata comparisons use `item.info`.
+- `server/inventory/slots.lua`: clone/swap operations preserve the `info` table. Supported QS storage/save paths keep those items. Full live SQL save/reconnect behavior still requires QA.
+- `server/custom/misc/UseItem.lua`: emits the trusted local `inventory:usedItem` event and accepts callback `.func`/`.cb`/`.callback` shapes. QB-Core's conventional `CreateUseableItem` registration and that verified QS event feed one deduplicated item dispatcher. No undocumented inventory exports are guessed.
 
-Once those are known, connect camera ownership to session entry/capture, implement single-use capture leases, overlay-hide acknowledgement before server capture, film/print delivery with recovery and capacity handling, item ownership checks on view, prop/animation cleanup and item assets. These are outstanding work, not completed integrations. The pending end-to-end QA is: use item → frame → capture/upload → print → receive item → view/copy → transfer/store → reopen after restart, including failures and duplicates.
+Optional `tests/test_qs_reference.py` executes the supplied readable add/remove/stack code with framework doubles when `QS_REFERENCE_DIR` is provided. It does not bundle vendor code or replace live integration testing.
 
-## Implemented storage backend
+## FiveManage sources
 
-Verified API reference: https://github.com/citizenfx/screenshot-basic#server
+Official documentation source: [fivemanage/mintlify-docs](https://github.com/fivemanage/mintlify-docs), inspected revision `e441647fe95980c2536799d8f65ea006339e4729`. Relevant files: `openapi.json`, `guides/uploading-files/images.mdx`, `api-reference/migrate-from-v2.mdx`, `guides/integration/lb-phone.mdx`.
 
-Trusted **server exports** `capturePhotoToStorage(player, metadata, callback)` and `readPhotoRecord(id, callback)` are implemented in storage.js. They have no network entry points. Caller metadata must come from server-owned identity; the future inventory orchestrator must validate ownership/session/film before calling. This backend is not itself permission or inventory authorization.
+The official SDK was inspected as an additional reference ([fivemanage/sdk](https://github.com/fivemanage/sdk), revision `013032014577f8750376fbf09354544f2a8a74d1`); it is not a runtime dependency and no SDK log/telemetry features were imported.
 
-The capture export uses screenshot-basic's server `requestClientScreenshot` API. It writes a JPEG under this resource's `data/photos/` directory using screenshot-basic's HTTP upload, not gameplay events. Records use server-generated cryptographic UUIDs, server timestamps and per-photo JSON files with exclusive publication. Public records exclude the private owner ID. Image data is never inventory metadata. The default maximum is 4 MiB and JPEG boundary bytes are checked; this is not a full decoder/content moderation service. Duplicate finalization never overwrites a record. Failed/time-out captures do not issue items. A late callback cleans unfinished files; already finalized records are retained. A crash during capture may leave orphan files requiring offline maintenance; there is no automatic retention purge.
+The implementation uses `POST https://api.fivemanage.com/api/v3/file`, multipart field `file`, private server Authorization header, server UUID filename, and `retentionExempt=true`. Success requires HTTP 2xx, `status=ok`, a file ID and a canonical permanent HTTPS `r2.fivemanage.com` image URL; `originalUrl` supports accounts with a custom CDN. Redirects, expiring query URLs, arbitrary hosts, credentials in URLs and oversized/malformed responses are rejected. Errors are sanitized. No key from chat was saved, committed or used in a live request.
 
-Optional self-hosted storage uses the existing FiveM resource HTTP route `/d-photomode/photos/<uuid>.jpg`. It serves finalized JPEGs only, never JSON or a directory listing. To use it later, provide permanent HTTPS routing to that endpoint and set the **server** convar:
+The official LB Phone guide identifies its provider settings in `lb-phone/config/config.lua` and private keys in `lb-phone/server/apiKeys.lua`. This resource does not read those files. Configure a rotated key via a private convar, optionally reusing an existing private `FIVEMANAGE_MEDIA_API_KEY` binding. Never replicate it with `setr` or publish it with `sets`.
 
-```cfg
-set d_photomode_public_base_url "https://YOUR_REAL_HOST/d-photomode/photos/"
-```
+## Capture and delivery protocol
 
-The example host is illustrative, not a working provider. Do not use a signed/temporary URL or embed credentials. Empty/unconfigured base URL disables capture and serving. FiveManage has been identified as the intended provider but its API has not been wired or contacted. You may use an existing durable host instead once its supported upload/verification API is supplied.
+1. QB/QS item use and command aliases all require server-observed camera possession, eligible character state and configured permission rules.
+2. Each short-lived session belongs to one source/character and server-observed ped anchor. Each capture has one short-lived ID and a checked phase.
+3. Camera changes are flushed before capture. NUI/cursor/owned overlays are hidden; two frames later a matching ready acknowledgement authorizes one screenshot.
+4. screenshot-basic's supported server API transfers the game image over its HTTP handler. Its server callback returns a JPEG data URI; only server resources exchange those bytes, never ordinary gameplay net events. The resource writes inside its own `data/photos/` directory, avoiding cross-resource filesystem writes.
+5. Size/encoding are checked, and the server uploads directly to FiveManage with its private key. An incomplete upload does not mint an item or consume film.
+6. An immutable server record is committed before printing. A single-use delivery journal is prepared before changing inventory. At delivery, character/session/position/camera/film are revalidated. One film is removed and one unique photo is added without an intentional wait between those QS operations. Failed addition attempts an exact-metadata film refund.
+7. Delivery/refund outcomes are journaled. Confirmed refund failures support the console-only recovery command. A stale/duplicate ready event, screenshot callback, upload completion or delivery preparation cannot print the same record again.
+8. Photo use reads its current server-side slot, verifies possession again after record lookup, and sends only public display fields to NUI. The original photographer is not the permanent owner: transferred photos work for their new holder. Client-provided URLs/captions are never the viewing authority.
 
-Back up `d-photomode/data/photos/`, keep it on persistent disk across resource upgrades, and do not replace it with the code checkout. Set a disk quota, monitor disk space and rate-limit/cache the public JPEG route at the HTTPS proxy. Backups must include images and their matching JSON. There is no database migration because storage uses per-photo records. Cross-system inventory transaction durability still depends on the pending QS integration.
+JSON files are exclusive on initial publication, flushed and atomically replaced for journal transitions. Directory sync is used where supported. QS's own database saves and these files are separate systems: a crash during mutation/save can be ambiguous. Such journals are quarantined from automatic reissue/refund; staff must reconcile the actual inventory state. This implementation does not claim crash-proof distributed inventory transactions.
 
-The cloud tests exercise local file durability and metadata behavior using test fixtures. **No real FiveM screenshot, deployed HTTP route, upload, inventory transfer, printing flow or public link has been verified.** Existing hosting access and a staging server are required for those checks.
+A cancelled/uncertain upload may leave orphan media, especially if the provider stored it but the response was lost. No automatic media deletion can remove an already printed photograph. Maintain backups and review unissued/orphan records carefully. The optional `local` provider remains an explicit fallback and is off by default; it needs a permanent HTTPS route and `d_photomode_public_base_url`. The FiveManage mode exposes no local image route.
 
-## Implemented viewer
+## Verification boundaries
 
-Off-white Polaroid presentation, bounded plain-text caption/name/date, HTTPS image validation, link-copy button, explicit public-link notice and selectable fallback on clipboard failure. There is no Copy Image button: reliable pixel-clipboard support in the deployed NUI has not been demonstrated. Images are released on close. A server-only display event is ready for the ownership-checking item handler; no public client request to view arbitrary record IDs exists. Server-provided photo records must have `id`, `url`, `photographer`, `takenAt`, optional `caption` and `public` boolean. The viewer does not establish inventory ownership by itself.
+Automated tests execute camera/session logic, real supplied readable QS add/remove/stack functions with doubles, capture/delivery failures, viewer behavior, local file/restart durability, delivery replay protection and mocked FiveManage HTTP responses. Browser tests exercise the actual NUI with mocked FiveM transport. They are not a real FiveM game render, a live FiveManage auth test or deployed QS SQL reload.
 
-Development checks:
-
-```sh
-PYTHONPATH=/workspace/.photomode-tools python3 -m unittest discover -s tests -p 'test_client.py'
-PYTHONPATH=/workspace/.photomode-tools python3 -m unittest discover -s tests -p 'test_sessions.py'
-python3 tests/test_ui.py
-python3 tests/test_photo_viewer.py
-node --test tests/test_storage.cjs
-node --check d-photomode/storage.js
-node --check d-photomode/html/photo.js
-```
-
-Performance/resmon: not measured. In-game prop placement, renderer/HUD capture behavior, FINI compatibility of new capture/prop behavior and QS metadata persistence remain pending.
+In-game capture, prop placement/network cleanup, FINI behavior, actual clipboard permission, QS transfer/storage/restart and measured idle/active/stress performance remain staging checks. See `TEST_PLAN.md`.

@@ -1,20 +1,23 @@
 """Development-only contract tests; requires lupa. No FiveM/FINI claims."""
 from pathlib import Path
 import unittest
-from lupa import LuaRuntime
+from lupa.lua54 import LuaRuntime
 ROOT = Path(__file__).resolve().parents[1] / 'd-photomode'
 
 class Sessions(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime()
         self.lua.execute("""
-        events, handlers, emitted = {}, {}, {}
+        events, handlers, emitted, usable, commands = {}, {}, {}, {}, {}
+        PhotoInventory={definitionsValid=function() return true end, hasCamera=function() return camera~=false end}
+        function RegisterCommand(name,fn) commands[name]=fn end
+        function GetCurrentResourceName() return 'd-photomode' end
         source, now, online, ace, alive, vehicle, distance, job = 7, 100, true, true, true, 0, 0, 'police'
         os.time = function() return now end
         local vec = { __sub = function() return setmetatable({}, {__len=function() return distance end}) end }
         exports = { ['qb-core'] = { GetCoreObject = function()
-            return { Functions = { GetPlayer = function()
-                if online then return {PlayerData={job={name=job},metadata={}}} end
+            return { Functions = { CreateUseableItem=function(name,fn) usable[name]=fn end, GetPlayer = function()
+                if online then return {PlayerData={citizenid='test-character',job={name=job},metadata={}}} end
             end } }
         end } }
         function RegisterNetEvent(name, fn) events[name] = fn end
@@ -33,6 +36,7 @@ class Sessions(unittest.TestCase):
         function start() events['d-photomode:start']() end
         """)
         self.lua.execute((ROOT/'config.lua').read_text())
+        self.lua.execute('Config.RequireAce=true')
         self.lua.execute((ROOT/'server.lua').read_text())
     def run_lua(self, code): self.lua.execute(code)
     def test_grant_duplicate_and_cooldown(self):

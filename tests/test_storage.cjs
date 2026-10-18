@@ -39,3 +39,25 @@ test('oversized images are rejected',async()=>fixture(async(store)=>{
   const item=await store.allocate(); await fs.writeFile(item.fileName,Buffer.alloc(store.maxBytes+1));
   await assert.rejects(store.finalize(item.id,metadata));
 }));
+test('delivery journal blocks duplicate prepares and persists across restart',async()=>fixture(async(store,directory)=>{
+  const item=await store.allocate();await fs.writeFile(item.fileName,Buffer.from([255,216,1,2,255,217]));
+  await store.finalize(item.id,metadata);
+  const journal=await store.prepareDelivery(item.id,metadata.owner,{slot:2,info:{quality:100}});
+  assert.equal(journal.phase,'prepared');
+  await assert.rejects(store.prepareDelivery(item.id,metadata.owner,false));
+  await assert.rejects(store.settleDelivery(item.id,'wrong-owner','delivered'));
+  await store.settleDelivery(item.id,metadata.owner,'delivered');
+  const restored=new PhotoStore(directory,'https://photos.example.test/');
+  assert.equal((await restored.delivery(item.id)).phase,'delivered');
+  await assert.rejects(restored.settleDelivery(item.id,metadata.owner,'delivered'));
+  await assert.rejects(restored.settleDelivery(item.id,metadata.owner,'refund_pending'));
+}));
+test('confirmed refund has a guarded recovery transition; ambiguous states cannot replay',async()=>fixture(async(store)=>{
+  const item=await store.allocate();await fs.writeFile(item.fileName,Buffer.from([255,216,1,2,255,217]));await store.finalize(item.id,metadata);
+  await store.prepareDelivery(item.id,metadata.owner,{slot:2,info:{quality:100}});
+  await store.settleDelivery(item.id,metadata.owner,'refund_pending');
+  await store.settleDelivery(item.id,metadata.owner,'refunding');
+  await assert.rejects(store.settleDelivery(item.id,metadata.owner,'refunding'));
+  await store.settleDelivery(item.id,metadata.owner,'refunded');
+  await assert.rejects(store.settleDelivery(item.id,metadata.owner,'refunding'));
+}));

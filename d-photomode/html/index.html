@@ -35,8 +35,9 @@
       <label>Composition guide<select id="guide"><option value="thirds">Rule of thirds</option><option value="golden">Golden ratio</option><option value="center">Center cross</option></select></label>
       <label>Letterbox ratio<select id="ratio"><option value="2.39">Cinema · 2.39:1</option><option value="1.85">Classic · 1.85:1</option><option value="1.7777778">Widescreen · 16:9</option><option value="1">Square · 1:1</option></select></label>
       <div class="row"><label><input id="showGrid" type="checkbox"> Show guide</label><label><input id="showBars" type="checkbox"> Letterbox</label></div>
+      <label id="captionControl">Caption<input id="caption" type="text" maxlength="80" autocomplete="off" placeholder="Optional caption"></label>
     </section>
-    <footer><button id="hide">Hide overlay</button><button id="reset">Reset</button><p id="hint"></p><p id="error" role="status" hidden>Control unavailable. Press Escape to exit.</p></footer>
+    <footer><button id="capture">Take photo</button><button id="hide">Hide overlay</button><button id="reset">Reset</button><p id="hint"></p><p id="error" role="status" hidden>Control unavailable. Press Escape to exit.</p><p id="captureMessage" role="status" aria-live="polite"></p></footer>
   </main>
 </div>
 <div id="photoViewer" hidden role="dialog" aria-modal="true" aria-labelledby="photoTitle">
@@ -45,6 +46,7 @@
 <div class="photo-details"><p id="photoCaption"></p><p><span id="photoPhotographer"></span><time id="photoDate"></time></p></div>
 </article><div class="photo-tools"><button id="photoCopy">Copy Image Link</button><button id="photoDone">Close</button><p id="photoCopyStatus" role="status" aria-live="polite"></p>
 <label id="photoFallback" hidden>Image link<input id="photoLink" type="text" readonly spellcheck="false"></label><p id="photoPublicNotice">Anyone with this public link can view the photograph.</p></div></div>
+<div id="captureFlash" hidden></div><div id="captureStatus" hidden role="status"><i aria-hidden="true"></i><span></span></div>
 <script src="app.js"></script><script src="photo.js"></script>
 </body>
 </html>

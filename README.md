@@ -1,3 +1,3 @@
 # Dinsoh Development · d-photomode
 
-Standalone anchored FiveM photography resource. See [installation and limitations](d-photomode/README.md) and [staging QA](d-photomode/TEST_PLAN.md). Development-only tests live in tests/.
+Inventory-based instant photography for We The People RP, QB-Core, QS-Inventory and FiveManage. See [installation and configuration](d-photomode/README.md), [integration evidence](d-photomode/POLAROID_INTEGRATION.md) and [staging QA](d-photomode/TEST_PLAN.md). Development tests live in tests/ and are excluded from the consumer ZIP.

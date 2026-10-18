@@ -1,56 +1,98 @@
 'use strict';
 // Trusted server exports only. No network event can allocate, finalize or read records.
 // QS item/film transactions are intentionally not registered until its installed API is verified.
-const fs = require('node:fs/promises');
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const resource = GetCurrentResourceName();
 const {PhotoStore, ID} = require(path.join(GetResourcePath(resource), 'storage-core.js'));
 let store;
 try {
   store = new PhotoStore(path.join(GetResourcePath(resource), 'data', 'photos'), GetConvar('d_photomode_public_base_url', ''));
 } catch (_) { console.error('[d-photomode] Invalid d_photomode_public_base_url; photo storage disabled.'); }
+const {uploadJpeg} = require(path.join(GetResourcePath(resource), 'fivemanage.js'));
+const provider = GetConvar('d_photomode_storage', 'fivemanage');
 const capturing = new Set();
-exports('capturePhotoToStorage', (player, metadata, callback) => {
+const cancellations = new Map();
+const maxUploads = Math.max(1, Math.min(16, GetConvarInt('d_photomode_max_uploads', 4)));
+exports('capturePhotoToStorage', (player, metadata, callback, progress) => {
   if (typeof callback !== 'function') return;
-  if (!store || !store.publicBase || GetResourceState('screenshot-basic') !== 'started' || capturing.has(player)) {
+  const apiKey = GetConvar('d_photomode_fivemanage_key', GetConvar('FIVEMANAGE_MEDIA_API_KEY', ''));
+  const configured = provider === 'fivemanage' ? Boolean(apiKey) : provider === 'local' && Boolean(store?.publicBase);
+  if (!store || !configured || GetResourceState('screenshot-basic') !== 'started' || capturing.has(player) || capturing.size >= maxUploads) {
     callback('Photo storage is unavailable or a capture is already running', null); return;
   }
   capturing.add(player);
-  let allocation, finished = false;
+  let allocation, finished = false, processing = false;
+  const controller = new AbortController();
   const complete = (error, photo) => {
     if (finished) return;
-    finished = true; clearTimeout(timeout); capturing.delete(player); callback(error, photo);
+    finished = true; clearTimeout(timeout); capturing.delete(player); cancellations.delete(player); callback(error, photo);
   };
   // HTTP uploads use screenshot-basic's one-use token, not ordinary gameplay events.
   const timeout = setTimeout(() => {
+    controller.abort();
     complete('Screenshot timed out', null);
     if (allocation) store.discardUnfinished(allocation.id).catch(() => {});
-  }, 20000);
+  }, 40000);
+  cancellations.set(player, () => {
+    controller.abort(); complete('Capture cancelled', null);
+    if (allocation) store.discardUnfinished(allocation.id).catch(() => {});
+  });
   store.allocate().then(result => {
     allocation = result;
     if (finished) return;
     global.exports['screenshot-basic'].requestClientScreenshot(player, {
-      fileName: allocation.fileName, encoding: 'jpg', quality: 0.85
-    }, async error => {
+      encoding: 'jpg', quality: 0.85
+    }, async (error, data) => {
+      if (processing) return;
+      processing = true;
       if (finished) { await store.discardUnfinished(allocation.id).catch(() => {}); return; }
       if (error) { complete('Screenshot upload failed', null); await store.discardUnfinished(allocation.id).catch(() => {}); return; }
       try {
-        const photo = await store.finalize(allocation.id, metadata);
+        // Screenshot-basic transfers over its HTTP handler and returns bytes only
+        // between server resources. Write inside our own resource to avoid needing
+        // cross-resource filesystem permissions. Nothing is sent in net events.
+        if (typeof data !== 'string' || data.length > Math.ceil(store.maxBytes / 3) * 4 + 64) throw new Error('Invalid screenshot size');
+        const match = /^data:image\/(?:jpeg|jpg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(data);
+        if (!match) throw new Error('Invalid screenshot encoding');
+        await fs.writeFile(allocation.fileName, Buffer.from(match[1], 'base64'), {flag:'wx'});
+        let hosting;
+        const {image} = await store.validateCapture(allocation.id, metadata);
+        if (finished) return;
+        if (typeof progress === 'function') progress('captured');
+        if (provider === 'fivemanage') hosting = await uploadJpeg(image, allocation.id, apiKey, {signal:controller.signal});
+        if (finished) return;
+        const photo = await store.finalize(allocation.id, metadata, hosting);
         complete(null, photo);
-      } catch (_) {
+      } catch (error) {
+        const reason = typeof error?.message === 'string' && error.message.startsWith('FiveManage') ? error.message : 'Capture storage failed';
+        if (!finished) console.warn(`[d-photomode] ${reason} (photo ${allocation.id}).`);
         complete('Capture could not be stored', null);
         await store.discardUnfinished(allocation.id).catch(() => {});
       }
     });
   }).catch(() => complete('Capture could not start', null));
 });
+exports('cancelPhotoCapture', player => cancellations.get(player)?.());
 exports('readPhotoRecord', (id, callback) => {
   if (!store || !ID.test(String(id))) { callback('Invalid photo', null); return; }
   store.read(id).then(record => callback(null, record)).catch(() => callback('Photo not found', null));
 });
+for (const method of ['prepareDelivery','settleDelivery']) exports(method, (id, owner, value, callback) => {
+  if (!store || !ID.test(String(id))) { callback('Invalid photo', null); return; }
+  store[method](id, owner, value).then(record => callback(null, record)).catch(() => callback('Photo delivery could not be saved', null));
+});
+exports('readPhotoDelivery', (id, callback) => {
+  if (!store || !ID.test(String(id))) { callback('Invalid photo', null); return; }
+  store.delivery(id).then(record => callback(null, record)).catch(() => callback('Photo delivery not found', null));
+});
+exports('readPhotoDisplay', (id, callback) => {
+  if (!store || !ID.test(String(id))) { callback('Invalid photo', null); return; }
+  store.read(id).then(record => callback(null, store.publicRecord(record))).catch(() => callback('Photo not found', null));
+});
 SetHttpHandler((request, response) => {
   const match = /^\/photos\/([a-f0-9-]+)\.jpg$/.exec(request.path || '');
-  if (!store || !store.publicBase || request.method !== 'GET' || !match || !ID.test(match[1])) {
+  if (!store || provider !== 'local' || !store.publicBase || request.method !== 'GET' || !match || !ID.test(match[1])) {
     response.writeHead(404, {'Content-Type':'text/plain'}); response.send('Not found'); return;
   }
   store.image(match[1]).then(image => {

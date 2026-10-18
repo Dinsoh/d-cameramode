@@ -25,4 +25,4 @@ Do not proceed with anticheat-sensitive movement until compatibility is demonstr
 
 Owner clarification: wtp-banking is visual UI reference only. Do not use its camera implementation. Developer branding: Dinsoh Development.
 
-Current extension scope: see POLAROID_REQUEST.md. Existing hosting is FiveManage; inventory is QS-Inventory. The owner offers its ZIP for actual API inspection. Do not substitute guessed inventory exports or expose the upload key.
+Current extension scope: see POLAROID_REQUEST.md. Existing hosting is FiveManage; inventory is QS-Inventory. The owner supplied its QS customization ZIP; the readable APIs and official FiveManage V3 docs were inspected. See d-photomode/POLAROID_INTEGRATION.md and POLAROID_REQUEST.md for the current extension scope. Do not substitute guessed inventory exports or expose the upload key.

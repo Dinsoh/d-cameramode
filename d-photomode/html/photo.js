@@ -23,8 +23,8 @@
     try { url = new URL(photo.url); } catch (_) { return; }
     if (url.protocol !== 'https:' || url.username || url.password) return;
     current = { id: photo.id, url: url.href, public: photo.public === true };
-    element('photoCaption').textContent = String(photo.caption || '').slice(0,120);
-    element('photoPhotographer').textContent = String(photo.photographer || '').slice(0,100);
+    element('photoCaption').textContent = [...String(photo.caption || '')].slice(0,120).join('');
+    element('photoPhotographer').textContent = [...String(photo.photographer || '')].slice(0,100).join('');
     const date = new Date(photo.takenAt);
     element('photoDate').textContent = Number.isNaN(date.valueOf()) ? '' : date.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
     element('photoDate').dateTime = Number.isNaN(date.valueOf()) ? '' : date.toISOString();

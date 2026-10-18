@@ -1,0 +1,11 @@
+# Merge into a PRIVATE server config; never use setr or sets for a key.
+# Replace this placeholder only in that private config, not in this example file:
+# set d_photomode_fivemanage_key "YOUR_ROTATED_MEDIA_KEY"
+# Existing private FIVEMANAGE_MEDIA_API_KEY is also supported.
+set d_photomode_storage "fivemanage"
+set d_photomode_max_uploads "4"
+# Keep your existing QB/QS prerequisites and start each resource only once.
+ensure qb-core
+ensure qs-inventory
+ensure screenshot-basic
+ensure d-photomode

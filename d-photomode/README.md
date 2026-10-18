@@ -1,57 +1,86 @@
 # d-photomode · Dinsoh Development
 
-**Polaroid integration is in progress on this branch.** See [integration status and prerequisites](POLAROID_INTEGRATION.md). Existing camera functionality remains available; usable camera/photo items and film transactions are not wired yet.
+Version 0.3.0 — inventory-based instant photography for We The People RP and QB-Core. Use a camera, frame the game view, capture it, and receive a unique photograph you can view, copy, give away or keep in supported QS storage. The camera controls from 0.2.x remain available.
 
-Anchored RP photography for QB-Core. Version 0.2.2, staging release.
+Implemented against the supplied QS customization source and FiveManage's official V3 API. **Cloud tests pass; a real FiveM capture, live FiveManage authentication/upload, prop placement, QS database reload and FINI behavior still require staging QA.** Resmon/concurrency timings have not been measured. See [TEST_PLAN.md](TEST_PLAN.md).
 
-## FINI assessment
-FINI's deployed camera policy is unknown. Scripted camera creation, local grading and DoF still need testing with FINI enabled on a normal player account. Anchoring reduces scope; it does not establish anticheat compatibility. No bypass, detection manipulation, whitelist integration or safety guarantee is included. Orbit controls are included but disabled by default; anchored-mode testing does not establish orbit compatibility. Access defaults to ACE restricted for staging; do not open access before QA.
+## Requirements
 
-## Install
-Requires current FiveM GTA V, OneSync server-side entity natives and QB-Core started first. Lua 5.4 runtime required. No database, inventory, ox_lib, banking or build pipeline required.
+- Current FiveM GTA V with OneSync/server entity natives and Lua 5.4.
+- QB-Core and the supplied QS-Inventory QB integration (`item.info`, QB `PlayerData.items`, `AddItem`/`RemoveItem`). See [integration evidence](POLAROID_INTEGRATION.md).
+- [screenshot-basic](https://github.com/citizenfx/screenshot-basic), including its server `requestClientScreenshot` API.
+- A FiveManage **media upload** key and server HTTPS access to `api.fivemanage.com`. Players must be able to load `r2.fivemanage.com` images.
 
-1. Copy `d-photomode` into your server resources directory.
-2. Configure `config.lua`. Keep ACE restriction on during validation.
-3. Add to server.cfg after QB-Core:
+No phone, Rockstar Editor, fmsdk, new UI framework, new database table or separate ox_lib dependency is required. Existing QS dependencies still apply. The native prop represents the physical camera; the inventory artwork is not a new streamed 3D Polaroid model.
 
-```cfg
-ensure qb-core
-ensure d-photomode
-add_ace group.admin d-photomode.use allow
+## Installation / upgrade
+
+1. Stop the old copy and run only one version. Back up the existing resource and keep any existing `d-photomode/data/` directory. Copy the updated `d-photomode` resource into your resources folder.
+2. Merge the entries in [install/items.lua](install/items.lua) **inside** `QBShared.Items` in `qb-core/shared/items.lua`. It is a table fragment, not a script to run. Do not replace the rest of your item list. The supplied QS QB bridge reads that list; `qs-inventory/shared/items.lua` is for its ESX mode.
+3. Copy the three PNGs from `install/images/` into `qs-inventory/html/images/`, as specified by the supplied item definitions. Optional hover labels are in `install/metadata.lua`.
+4. Use the updated `config.lua`, merging your tested FOV/orbit/job/key settings. New required settings include `Items`, `Prop`, film/capture/print options. Do not retain the old config unchanged. Camera/photo names must match the registered items; the photo must keep `unique = true` and `stack = false`. The supplied item entries disable decay/removal on breakage so collected photographs do not age away.
+5. Configure a **rotated, private server-side** FiveManage media key. A server already using private `FIVEMANAGE_MEDIA_API_KEY` is supported without a duplicate binding. Otherwise add this in a private server config (replace the placeholder there):
+
+   ```cfg
+   set d_photomode_fivemanage_key "YOUR_ROTATED_MEDIA_KEY"
+   set d_photomode_storage "fivemanage"
+   ```
+
+   Use `set`, never `setr` or `sets`. Do not put keys in shared Lua, NUI, a public repository or chat. LB Phone's own private Lua API table is not automatically a convar; this resource does not read its secret files. No key supplied in chat has been embedded in this resource.
+6. Start in this order, preserving your existing QB/QS prerequisites:
+
+   ```cfg
+   ensure qb-core
+   ensure qs-inventory
+   ensure screenshot-basic
+   ensure d-photomode
+   ```
+
+7. Restart the core/inventory as appropriate to load the item definitions, then test on staging. Give the tester `polaroid_camera` and `polaroid_film` using your existing admin/shop tooling. This resource adds no shop, item-grant command or economy prices.
+
+By default any eligible player **holding the camera** can use it (`RequireAce = false`). `/photomode` and F7 are convenience aliases and enforce the same possession check. For a restricted staging test set `RequireAce = true` and grant `d-photomode.use` to your tester principal. `AllowedJobs` optionally restricts camera use; photo owners can view their pictures independently of the photographer's job/ACE. Existing pictures are not consumed on view or copy.
+
+## Taking and viewing photographs
+
+Use the camera inventory item. It equips `prop_pap_camera` and its native upper-body camera animation. Camera: angle/distance/height when orbit is enabled, zoom/FOV and roll. Look: 13 native filters, adjustable strength, optional DoF/focus/blur. Frame: thirds/golden/center guides, letterbox ratios and an optional caption.
+
+Enter/Return or **Take photo** releases the cursor and hides all resource overlays. After two NUI frames the server requests an actual game-render screenshot. A shutter sound plays; a short flash happens only after the image has reached the server, so it is not baked into the photograph. A successful FiveManage upload triggers the printing effect and inventory delivery. Default film cost is one unit **per successfully printed photo**, not per failed attempt. Set `RequireFilm = false` to disable consumption.
+
+H hides/restores all photo controls/guides; Escape exits. Key mappings are configurable in FiveM settings. Focused NUI shortcuts use the configured initial key names; use the on-screen buttons if a remapped game shortcut is intercepted by NUI. Death, displacement/teleport, vehicle/ragdoll changes, expiry, camera-item loss, disconnect and resource stop end the session and clean up the owned camera, prop, animation, grade and focus.
+
+Use a photo inventory item to view that specific picture. The off-white Polaroid viewer shows the server-owned caption, photographer's RP name and date. **Copy Image Link** copies a permanent public image URL; anyone with that link can view it. If clipboard access is unavailable a selectable URL appears. No Copy Image/pixel button is offered because reliable pixel clipboard support has not been demonstrated in the deployed NUI. Escape closes the viewer. Transferring the item grants viewing to the new holder, not just its original photographer.
+
+FOV initially matches your gameplay camera; Reset returns to that entry value. Focus distance affects blur only, not zoom. `EnableDof` is off by default because renderer/graphics mods can change its behavior. Filters use real GTA timecycle modifiers, with appearance pending your visual QA. Only one native grade is active at a time.
+
+## FINI and framing limits
+
+Orbit remains **disabled by default**. The owner reported the anchored build working; that does not verify orbit or the new attached prop/capture behavior with FINI. Enable `Orbit.enabled` only in your approved staging test, with FINI enabled. No detection manipulation, bypass or no-ban guarantee is provided. These checks do not prove an unmodified client or replace FINI.
+
+Orbit stays around the server-issued player anchor with bounded angles/distance/height and collision checks. No player teleportation, invisibility, spectator mode, map-wide flying or player collision changes are used. The attached prop's collision alone is disabled. The initial camera position otherwise stays fixed. There are no camera-coordinate broadcasts.
+
+The screenshot is the full native game-render view. Guide/letterbox masks are preview overlays and are intentionally hidden before capture; they do not crop the uploaded pixels. Native FOV/roll/grading/DoF appear according to screenshot-basic and the renderer. Other resources' overlays and graphics effects are outside this resource's control. Entry refuses an existing scripted camera/timecycle effect; coordinate resources that start one during photo mode.
+
+## Storage, privacy and recovery
+
+See [POLAROID_INTEGRATION.md](POLAROID_INTEGRATION.md) for API references and the recovery contract. Images upload from the **server** to FiveManage V3 using the private Authorization header. Printed records accept only canonical HTTPS `r2.fivemanage.com` URLs without expiring query tokens; a custom-CDN response can use its canonical `originalUrl`. Uploads request `retentionExempt=true`. Keep the FiveManage account active and its retention/access settings appropriate; manual/provider deletion can still break a public link.
+
+Each server-generated UUID has a record, local JPEG and delivery journal under `data/photos/`. **Back up and retain that folder across code updates and server moves.** Do not delete it or replace it with a clean Git checkout. There is no SQL migration: QS retains inventory items in its existing storage, while this resource retains photo records/files. Inventory metadata contains the public photo ID/URL/date/name; the viewer re-reads the authoritative record and checks possession. Private citizen IDs stay only in server records/journals.
+
+Failed capture/upload does not charge film. Actual QS capacity is enforced when adding a photo. A failed print attempts to return the exact film metadata. If that refund cannot fit, the player receives a photo ID and a durable `refund_pending` journal is written. After the owner frees inventory space and is online, staff can run in the **server console**:
+
+```text
+photomode_refund <photo UUID>
 ```
 
-Use your existing principal/group assignments or grant a specific tester principal. QB-Core admin status alone does not create this ACE. To permit all players after successful QA, set `RequireAce = false`. `AllowedJobs` optionally restricts current QB-Core job names, independently of ACE.
+That command handles confirmed pending refunds once. It refuses ambiguous `prepared`/`refunding` crash states and delivered records. Inventory mutations and filesystem journals cannot be one atomic transaction across QS's persistence; a process/power failure in that window requires staff reconciliation before reissuing anything. Do not blindly retry/refund an ambiguous record. Captures with uncertain upload completion or failed delivery can leave orphan media; do not delete records already referenced by printed items.
 
-## Controls and features
-`/photomode` or F7 enters/exits. Escape exits. H hides/restores the entire overlay, including guides/bars. Change keyboard bindings in FiveM settings; config keys set initial defaults. When NUI is focused its hide shortcut uses the configured key name, so use the Hide overlay button if you rebind the game shortcut.
-
-Compose your normal gameplay camera before entry: with orbit disabled, position and heading remain anchored, with FOV (20–90° by default), roll (±15°), thirds/golden/center guides, letterbox ratios and 13 local filter choices. No player repositioning, collision changes, invisibility, spectator mode or freecam. Use your usual screenshot tool; there is no capture/upload service. For cinema bars in screenshots retain the overlay; fully clean screenshots use H. DoF/focus is optional, off by default and renderer dependent. Focus distance changes blur range only, independently of zoom; blur strength is adjustable when DoF is enabled. Unsupported grading can be removed from Config.Filters. Exposure and poses are not included: there is no reliable general-purpose exposure control or verified FINI allowance here.
-
-Sessions last 180 seconds by default and starts are rate limited. Server validates online player, ACE/job access, death/laststand, on-foot state and displacement. Server checks active sessions once per second; client handles local death, movement, vehicle/ragdoll, timeout and resource stop. One session per player, no camera-coordinate broadcast, SQL or inventory effects. These checks do not secure a locally modified client or implement an anticheat.
-
-### Zoom, filters and framing
-Entry and Reset preserve the current gameplay camera FOV by default, avoiding an initial zoom jump. The starting value is included in the slider range when graphics settings put it outside configured bounds. Set `Fov.preserveGameplay = false` to use the configured default instead. Zoom is labeled in degrees; lower FOV magnifies the scene.
-
-Camera contains orbit controls, zoom and roll; Look contains filters, intensity and optional DoF/focus/blur; Frame contains guides and letterboxing. There are 13 native looks including Natural, Cinema, black-and-white, vivid/muted, contrast, brightness and desaturated looks. Filter strength is adjustable and disabled for Natural. Only one native grade is active at a time; there is no arbitrary photo-editor effect stacking. Modifier names were verified against GTA timecycle data, not visually tested in this server. Remove any look incompatible with your graphics pack.
-
-Guides are thirds, golden ratio and center cross. Letterbox/pillarbox masks frame 2.39:1, 1.85:1, 16:9 or square compositions without stretching the game view. They are preview overlays, not an exported image crop. H still hides all resource overlays. No camera-item, upload or print flow is included on main yet; the Polaroid branch tracks that integration.
-
-## Player photography / constrained orbit (staging)
-The owner reports the anchored build working in server testing. Orbit is a separate behavior requiring its own FINI-enabled test.
-
-To test the new angles, keep ACE restricted and set `Config.Orbit.enabled = true` in `config.lua`, then restart `d-photomode`. The authorized player's UI gains Front / Left / Back / Right buttons and angle, distance and height sliders. It starts facing the player from the front; no phone or Rockstar Editor required. Angle is relative to the player's entry heading. Default distance limits are 1–3 m; height is -0.4 to +1.5 m relative to a target 0.7 m above the entry ped coordinate. FOV/roll/grades and overlay hiding still work. Reset returns to front at default distance/height.
-
-The server supplies the anchor/heading/limits, and checks actual ped displacement as before. Camera translation is calculated only around that anchor; it never follows a moving player or permits world-coordinate input. The player is not teleported, frozen, hidden or posed. Collision line probes shorten the camera offset before obstructions; insufficient room or unavailable collision results end the session. Rechecks run every 250 ms while orbit is active to catch moving obstructions. These checks are not proof against all clipping/streaming artifacts; test interiors, vehicles, glass and nearby peds in game. Camera motion currently snaps to input rather than sweeping or interpolating through geometry. Probes and movement cost have not been profiled.
-
-Set `Config.Orbit.enabled = false` and restart to restore the anchored-only workflow. Do not change FINI detections or claim orbit compatibility based on anchored test results.
-
-## Cleanup and coexistence
-Only the owned camera is destroyed. Active controls are suppressed without moving/freezing the ped. NUI focus and radar are restored on exit, with HUD suppression lasting only active frames. Camera DoF ends with camera destruction. No streaming focus, weather, time, ped pose or primary timecycle is changed. Entry refuses existing scripted cameras and timecycle effects; an owned extra grade is cleared on exit. Other resources starting camera/extra-grade effects during the session may conflict; coordinate them in staging. No universal effect-ownership API exists.
+Uploads are bounded to four simultaneous requests by default (`set d_photomode_max_uploads "4"`), one capture per player, 4 MiB JPEG and quality 0.85. `CaptureCooldownSeconds`, `PrintMilliseconds`, `CaptionLength`, item names and film policy are in config. No per-frame inactive camera threads, continuous inventory polling, SQL per frame, photo broadcasts, telemetry or webhooks are added.
 
 ## Troubleshooting
-Unavailable: the notification now reports the specific ACE, job, character, death/laststand or vehicle reason. ACE restrictions remain enabled by default. Grant `d-photomode.use` to an existing tester principal, or set `RequireAce = false` for public player access after QA. QB-Core admin status alone does not guarantee the ACE.
 
-A QB-Core `global lib` notification error means its customized notification handler has no initialized ox_lib global in that resource. d-photomode now uses local GTA notices and does not call that handler. Other resources using it may still need QB-Core's own ox_lib integration repaired; starting ox_lib or importing it in d-photomode alone does not initialize QB-Core's Lua globals. Exit before retrying. Start requests have a five-second cooldown. If another screen effect or camera is active, finish it first. Missing blur: verify renderer/graphics settings and EnableDof; turn off if incompatible. Script errors: inspect client F8/server console and provide exact versions and reproduction steps.
-
-## Validation
-See TEST_PLAN.md. Cloud checks cover Lua parsing, mocked session logic and browser UI only. FiveM natives, deployed QB-Core, FINI, visual presets and renderer behavior are **not validated in game**. Idle/active resmon and concurrency cost: **not measured**. This version requires staging QA before production or a Tebex release.
+- Camera unavailable: check item definitions, possession, QB character/death/vehicle state, job and optional ACE. Notifications use GTA natives, avoiding the customized QB `lib`-nil notification handler.
+- Upload fails: ensure screenshot-basic is started, the private media key is configured, and the server can reach the FiveManage API. The server logs sanitized HTTP errors such as 401/403/429 without keys or response bodies. A key's presence does not establish correct permissions.
+- Missing image after reconnect: check `data/photos/` backup/permissions, the stored public URL, FiveManage retention/account status and the photo's actual `item.info.photoId`. Do not substitute a new URL in client metadata.
+- Inventory full: free space and retry. Failed print film should be returned; if marked pending use the recovery process above.
+- No blur or odd grade: disable DoF or remove the incompatible native filter. Verify graphics mods in staging.
+- Prop position/animation or FINI alert: stop the test and inspect your server configuration. Adjust only supported prop placement/settings; never bypass detections.

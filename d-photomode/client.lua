@@ -7,6 +7,7 @@ local function closePhoto()
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
     SendNUIMessage({ action = 'closePhoto' })
+    TriggerServerEvent('d-photomode:closePhoto')
 end
 
 -- Resource-local notification: some customized QB-Core handlers assume an
@@ -25,12 +26,45 @@ local function cleanup(reason)
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
     SendNUIMessage({ action = 'close' })
-    RenderScriptCams(false, false, 0, true, false)
-    if s.cam and DoesCamExist(s.cam) then DestroyCam(s.cam, false) end
+    if s.cam and DoesCamExist(s.cam) then
+        RenderScriptCams(false, false, 0, true, false)
+        DestroyCam(s.cam, false)
+    end
+    if s.prop and DoesEntityExist(s.prop) then DeleteEntity(s.prop) end
+    if s.pose then StopAnimTask(s.ped, Config.Prop.dictionary, Config.Prop.animation, 1.0) end
+    if s.model then SetModelAsNoLongerNeeded(s.model) end
+    if s.dictionary then RemoveAnimDict(s.dictionary) end
     if s.filter then ClearExtraTimecycleModifier() end
     DisplayRadar(s.radar)
     TriggerServerEvent('d-photomode:finish', s.id)
     if reason then notify(reason) end
+end
+
+local function equipCamera(s)
+    local hash = GetHashKey(Config.Prop.model)
+    if not IsModelInCdimage(hash) or not IsModelValid(hash) then error('Camera prop is unavailable') end
+    s.model, s.dictionary = hash, Config.Prop.dictionary
+    RequestModel(hash)
+    RequestAnimDict(s.dictionary)
+    local deadline = GetGameTimer() + 5000
+    while state == s and (not HasModelLoaded(hash) or not HasAnimDictLoaded(s.dictionary)) do
+        if GetGameTimer() >= deadline then error('Camera assets timed out') end
+        Wait(0)
+    end
+    if state ~= s then return false end
+    local position = GetEntityCoords(s.ped)
+    s.prop = CreateObject(hash, position.x, position.y, position.z, true, true, false)
+    if s.prop == 0 then error('Camera prop could not be created') end
+    SetEntityCollision(s.prop, false, false) -- attached prop only; never the player
+    local offset, rotation = Config.Prop.offset, Config.Prop.rotation
+    AttachEntityToEntity(s.prop, s.ped, GetPedBoneIndex(s.ped, Config.Prop.bone),
+        offset.x, offset.y, offset.z, rotation.x, rotation.y, rotation.z, true, true, false, true, 1, true)
+    SetModelAsNoLongerNeeded(hash)
+    s.model = nil
+    TaskPlayAnim(s.ped, s.dictionary, Config.Prop.animation, 8.0, -8.0, -1, 49, 0.0, false, false, false)
+    s.pose = true
+    TriggerServerEvent('d-photomode:prop', s.id, NetworkGetNetworkIdFromEntity(s.prop))
+    return true
 end
 
 -- Server grant supplies the anchor and limits; NUI never supplies world coordinates.
@@ -108,6 +142,8 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
         radar = not IsRadarHidden(), hidden = false, expires = GetGameTimer() + seconds * 1000 }
     state = s
     local ok, err = pcall(function()
+        if not equipCamera(s) then return end
+        if not IsGameplayCamRendering() then error('Another camera is active') end
         s.cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', false)
         if s.cam == 0 then error('Camera creation failed') end
         SetCamCoord(s.cam, position.x, position.y, position.z)
@@ -118,13 +154,14 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
         SetNuiFocus(true, true)
         SetNuiFocusKeepInput(false)
         SendNUIMessage({ action = 'open', fov = fovBounds, strength = Config.FilterStrength or 0.65, tilt = Config.MaxTilt,
-            filters = Config.Filters, dof = Config.EnableDof, hideKey = Config.HideKey, orbit = orbit or false })
+            filters = Config.Filters, dof = Config.EnableDof, hideKey = Config.HideKey, captureKey = Config.CaptureKey, captionLength = Config.CaptionLength, orbit = orbit or false })
     end)
     if not ok then
         cleanup(s.endReason or 'Photo mode could not start')
         if not s.endReason then print(('[%s] %s'):format(resource, err)) end
         return
     end
+    if state ~= s then return end
     CreateThread(function()
         local success, failure = xpcall(function()
             while state == s do
@@ -132,7 +169,7 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
                 if state ~= s then break end
                 local current = PlayerPedId()
                 if current ~= s.ped or IsEntityDead(current) or IsPedInAnyVehicle(current, true)
-                    or IsPedRagdoll(current) or #(GetEntityCoords(current) - s.origin) > Config.MaxPedDisplacement
+                    or IsPedRagdoll(current) or not DoesEntityExist(s.prop) or #(GetEntityCoords(current) - s.origin) > Config.MaxPedDisplacement
                     or GetGameTimer() >= s.expires then cleanup() break end
                 if s.orbit and GetGameTimer() >= s.nextCollision then
                     orbitPosition(s)
@@ -159,19 +196,23 @@ RegisterNetEvent('d-photomode:denied', function(reason)
     notify(type(reason) == 'string' and reason or 'Photo mode is unavailable. Check permissions and player state.')
 end)
 
-RegisterCommand(Config.Command, function()
+local function requestStart()
     if viewing then closePhoto() return end
     if state then cleanup() return end
     if pending then return end
     pending = true
     TriggerServerEvent('d-photomode:start')
     SetTimeout(5000, function() pending = false end)
-end, false)
+end
+RegisterCommand(Config.Command, requestStart, false)
+RegisterNetEvent('d-photomode:useCamera', function()
+    if source == 65535 and not state and not pending then requestStart() end
+end)
 RegisterKeyMapping(Config.Command, 'Toggle photography mode', 'keyboard', Config.Key)
 RegisterCommand('photomode_exit', function() cleanup() end, false)
 RegisterKeyMapping('photomode_exit', 'Exit photography mode', 'keyboard', Config.ExitKey)
 local function hide()
-    if not state then return end
+    if not state or state.captureRequested or state.captureId then return end
     state.hidden = not state.hidden
     SendNUIMessage({ action = 'hidden', hidden = state.hidden })
     SetNuiFocus(not state.hidden, not state.hidden)
@@ -184,7 +225,7 @@ RegisterNUICallback('close', function(_, cb) cleanup() cb({ ok = true }) end)
 RegisterNUICallback('hide', function(_, cb) hide() cb({ ok = true }) end)
 RegisterNUICallback('update', function(data, cb)
     local s = state
-    if not s or type(data) ~= 'table' then cb({ ok = false }) return end
+    if not s or s.captureRequested or s.captureId or type(data) ~= 'table' then cb({ ok = false }) return end
     local function number(value, lo, hi, fallback)
         local n = tonumber(value)
         if not n or n ~= n or n == math.huge or n == -math.huge then return fallback end
@@ -218,7 +259,7 @@ RegisterNUICallback('update', function(data, cb)
     if not ok then cleanup(s.endReason or 'Photo controls could not be applied') end
     cb({ ok = ok })
 end)
-AddEventHandler('onResourceStop', function(name) if name == resource or name == 'qb-core' then cleanup() end end)
+AddEventHandler('onResourceStop', function(name) if name == resource or name == 'qb-core' or name == Config.InventoryResource then cleanup() end end)
 
 -- This display event is for the authoritative inventory/photo-record handler only.
 -- No client request to view by ID is registered until inventory ownership can be checked.
@@ -230,5 +271,73 @@ RegisterNetEvent('d-photomode:viewPhoto', function(photo)
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(false)
     SendNUIMessage({ action = 'photo', photo = photo })
+    CreateThread(function()
+        while viewing do
+            Wait(250)
+            if IsEntityDead(PlayerPedId()) then closePhoto() end
+        end
+    end)
 end)
 RegisterNUICallback('closePhoto', function(_, cb) closePhoto() cb({ ok = true }) end)
+
+RegisterNetEvent('d-photomode:closePhoto', function() if source == 65535 then closePhoto() end end)
+RegisterNUICallback('capture', function(data, cb)
+    local s = state
+    if not s or s.captureRequested or s.captureId then cb({ok = false}) return end
+    s.captureRequested = true
+    TriggerServerEvent('d-photomode:capture', s.id, type(data) == 'table' and data.caption or '')
+    SetTimeout(6000, function()
+        if state == s and s.captureRequested and not s.captureId then
+            s.captureRequested = false
+            SendNUIMessage({action = 'captureResult', ok = false, message = 'The camera did not respond. Try again.', hidden = s.hidden})
+        end
+    end)
+    cb({ok = true})
+end)
+RegisterNetEvent('d-photomode:prepareCapture', function(id, captureId)
+    local s = state
+    if source ~= 65535 or not s or s.id ~= id or not s.captureRequested or s.captureId then return end
+    s.captureId, s.captureRequested = captureId, false
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({action = 'prepareCapture', id = captureId})
+end)
+RegisterNUICallback('captureReady', function(data, cb)
+    local s = state
+    if not s or not s.captureId or type(data) ~= 'table' or data.id ~= s.captureId then cb({ok = false}) return end
+    if not s.captureReady then
+        s.captureReady = true
+        PlaySoundFrontend(-1, 'Camera_Shoot', 'Phone_SoundSet_Default', true)
+        TriggerServerEvent('d-photomode:captureReady', s.id, s.captureId)
+    end
+    cb({ok = true})
+end)
+RegisterNetEvent('d-photomode:captured', function(id, captureId)
+    if source == 65535 and state and state.id == id and state.captureId == captureId then
+        SendNUIMessage({action = 'captured'})
+    end
+end)
+RegisterNetEvent('d-photomode:printing', function(id, captureId, duration)
+    if source == 65535 and state and state.id == id and state.captureId == captureId then
+        SendNUIMessage({action = 'printing', duration = duration})
+    end
+end)
+RegisterNetEvent('d-photomode:captureResult', function(id, captureId, ok, message)
+    local s = state
+    if source ~= 65535 or not s or s.id ~= id or (s.captureId and captureId ~= s.captureId) then return end
+    s.captureId, s.captureRequested, s.captureReady = nil, false, false
+    SendNUIMessage({action = 'captureResult', ok = ok, message = message, hidden = s.hidden})
+    SetNuiFocus(not s.hidden, not s.hidden)
+    SetNuiFocusKeepInput(false)
+end)
+RegisterCommand('photomode_capture', function()
+    if state and not state.captureId and not state.captureRequested then SendNUIMessage({action = 'requestCapture'}) end
+end, false)
+RegisterKeyMapping('photomode_capture', 'Take Polaroid photograph', 'keyboard', Config.CaptureKey)
+
+-- React to inventory changes; never run an inventory-polling frame loop.
+for _, event in ipairs({'qs-inventory:client:updateSlots', 'qs-inventory:client:UpdatePlayerInventory', 'QBCore:Player:SetPlayerData', 'QBCore:Client:OnPlayerUpdated'}) do
+    RegisterNetEvent(event, function()
+        if state or viewing then TriggerServerEvent('d-photomode:inventoryChanged') end
+    end)
+end

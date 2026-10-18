@@ -3,8 +3,11 @@ let active = false;
 let hideKey = 'H';
 let orbit = false;
 let timer;
-let sending = false;
 let dirty = false;
+let inFlight = null;
+let captureRequested = false;
+let captureKey = 'RETURN';
+let captureStatusTimer;
 async function post(route, data = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
@@ -37,13 +40,19 @@ function labels() {
   $('focusValue').textContent = `${$('focus').value} m`;
 }
 async function flush() {
-  if (sending || !active) return;
-  sending = true; dirty = false;
-  await post('update', values());
-  sending = false;
-  if (dirty && active) flush();
+  if (!active) return {ok:false};
+  if (inFlight) {
+    const previous = await inFlight;
+    return dirty && active ? flush() : previous;
+  }
+  dirty = false;
+  inFlight = post('update', values());
+  const result = await inFlight;
+  inFlight = null;
+  return dirty && active ? flush() : result;
 }
 function update() {
+  if (captureRequested) return;
   labels(); dirty = true;
   if (!timer) timer = setTimeout(() => { timer = undefined; flush(); }, 50);
 }
@@ -63,6 +72,11 @@ window.addEventListener('message', ({ data }) => {
   if (!data || typeof data.action !== 'string') return;
   if (data.action === 'open') {
     active = true; hideKey = data.hideKey;
+    captureKey = data.captureKey || 'RETURN'; captureRequested = false;
+    $('capture').disabled = false;
+    $('caption').value = ''; $('caption').maxLength = data.captionLength ?? 80;
+    $('captionControl').hidden = (data.captionLength ?? 80) === 0;
+    $('captureMessage').textContent = ''; hideCaptureStatus();
     orbit = data.orbit || false;
     $('orbit').hidden = !orbit;
     if (orbit) {
@@ -77,10 +91,31 @@ window.addEventListener('message', ({ data }) => {
       option.textContent = item.label; return option;
     }));
     $('depth').hidden = !data.dof;
-    $('hint').textContent = `Escape · exit / ${hideKey} · hide or restore overlay. Use your usual screenshot key.`;
+    $('hint').textContent = `${captureKey} · shutter / ${hideKey} · hide overlay / Escape · exit`;
     reset(); selectTab('camera');
   } else if (data.action === 'close') {
-    active = false; clearTimeout(timer); timer = undefined; $('frame').hidden = true;
+    active = false; captureRequested = false; hideCaptureStatus(); $('captureFlash').hidden = true; clearTimeout(timer); timer = undefined; $('frame').hidden = true;
+  } else if (data.action === 'prepareCapture') {
+    captureRequested = true; $('capture').disabled = true;
+    $('frame').hidden = true; hideCaptureStatus(); $('captureFlash').hidden = true;
+    // Give CEF two painted frames without overlays/cursor before authorizing capture.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (active && captureRequested) post('captureReady', {id:data.id});
+    }));
+  } else if (data.action === 'captured') {
+    $('captureFlash').hidden = false;
+    status('Uploading photograph…', false);
+  } else if (data.action === 'printing') {
+    status('Printing photograph…', true);
+  } else if (data.action === 'captureResult') {
+    captureRequested = false; $('capture').disabled = false;
+    $('frame').hidden = Boolean(data.hidden);
+    $('captureMessage').textContent = String(data.message || (data.ok ? 'Photograph printed.' : 'Photograph could not be printed.'));
+    status($('captureMessage').textContent, false);
+    clearTimeout(captureStatusTimer);
+    captureStatusTimer = setTimeout(hideCaptureStatus, 4500);
+  } else if (data.action === 'requestCapture') {
+    takePhotograph();
   } else if (data.action === 'hidden') {
     $('frame').hidden = data.hidden; // hide guides and bars too for a completely clean screenshot
   }
@@ -89,10 +124,11 @@ for (const id of ['fov', 'tilt', 'filter', 'dof', 'focus', 'angle', 'distance', 
 $('showGrid').addEventListener('change', () => { $('grid').hidden = !$('showGrid').checked; });
 $('showBars').addEventListener('change', () => { $('bars').hidden = !$('showBars').checked; });
 $('close').addEventListener('click', () => post('close'));
-$('hide').addEventListener('click', () => post('hide'));
-$('reset').addEventListener('click', () => { reset(); update(); });
+$('hide').addEventListener('click', () => { if (!captureRequested) post('hide'); });
+$('reset').addEventListener('click', () => { if (!captureRequested) { reset(); update(); } });
 window.addEventListener('keydown', event => {
   if (!active || event.repeat) return;
+  if ((event.key === 'Enter' && captureKey === 'RETURN') || event.key.toUpperCase() === captureKey) { event.preventDefault(); takePhotograph(); }
   if (event.key === 'Escape') { event.preventDefault(); post('close'); }
   // When focused NUI owns keyboard events; game key mapping handles the hidden state.
   if (event.key.toUpperCase() === hideKey.toUpperCase()) { event.preventDefault(); post('hide'); }
@@ -118,3 +154,27 @@ function selectTab(name) {
   }
 }
 for (const tab of document.querySelectorAll('[data-tab]')) tab.addEventListener('click', () => selectTab(tab.dataset.tab));
+
+function hideCaptureStatus() {
+  clearTimeout(captureStatusTimer);
+  $('captureStatus').hidden = true;
+  $('captureStatus').classList.remove('printing');
+}
+function status(message, printing) {
+  clearTimeout(captureStatusTimer);
+  $('captureStatus').hidden = false;
+  $('captureStatus').classList.toggle('printing', printing);
+  $('captureStatus').querySelector('span').textContent = message;
+}
+async function takePhotograph() {
+  if (!active || captureRequested) return;
+  captureRequested = true; $('capture').disabled = true;
+  clearTimeout(timer); timer = undefined;
+  const applied = await flush();
+  if (!active) return;
+  if (!applied?.ok) { captureRequested = false; $('capture').disabled = false; return; }
+  const result = await post('capture', {caption:$('caption').value});
+  if (!result.ok && active) { captureRequested = false; $('capture').disabled = false; }
+}
+$('capture').addEventListener('click', takePhotograph);
+$('captureFlash').addEventListener('animationend', () => { $('captureFlash').hidden = true; });
