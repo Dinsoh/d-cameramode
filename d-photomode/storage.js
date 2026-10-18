@@ -1,6 +1,5 @@
 'use strict';
 // Trusted server exports only. No network event can allocate, finalize or read records.
-// QS item/film transactions are intentionally not registered until its installed API is verified.
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const resource = GetCurrentResourceName();
@@ -18,17 +17,24 @@ exports('capturePhotoToStorage', (player, metadata, callback, progress) => {
   if (typeof callback !== 'function') return;
   const apiKey = GetConvar('d_photomode_fivemanage_key', GetConvar('FIVEMANAGE_MEDIA_API_KEY', ''));
   const configured = provider === 'fivemanage' ? Boolean(apiKey) : provider === 'local' && Boolean(store?.publicBase);
-  if (!store || !configured || GetResourceState('screenshot-basic') !== 'started' || capturing.has(player) || capturing.size >= maxUploads) {
+  if (!store || !configured || GetResourceState('screencapture') !== 'started' || capturing.has(player) || capturing.size >= maxUploads) {
     callback('Photo storage is unavailable or a capture is already running', null); return;
   }
   capturing.add(player);
-  let allocation, finished = false, processing = false;
+  let allocation, finished = false, processing = false, stage = 'allocate';
+  const report = error => {
+    const codes = ['EACCES','EPERM','ENOSPC','EROFS','ENOENT','EIO','EINVAL','ENOSYS','ENOTSUP','EEXIST','EBADF'];
+    const validation = ['Invalid screenshot size','Invalid screenshot encoding','Image exceeds storage limits','Capture is not a JPEG','Missing server-owned capture identity'];
+    const detail = codes.includes(error?.code) ? error.code : validation.includes(error?.message) ? error.message : 'operation failed';
+    const reason = typeof error?.message === 'string' && error.message.startsWith('FiveManage') ? error.message : detail;
+    console.warn(`[d-photomode] Capture failed at ${stage}: ${reason}${allocation ? ` (photo ${allocation.id})` : ''}.`);
+  };
   const controller = new AbortController();
   const complete = (error, photo) => {
     if (finished) return;
     finished = true; clearTimeout(timeout); capturing.delete(player); cancellations.delete(player); callback(error, photo);
   };
-  // HTTP uploads use screenshot-basic's one-use token, not ordinary gameplay events.
+  // ScreenCapture's one-use upload token returns bytes to this server only.
   const timeout = setTimeout(() => {
     controller.abort();
     complete('Screenshot timed out', null);
@@ -41,37 +47,46 @@ exports('capturePhotoToStorage', (player, metadata, callback, progress) => {
   store.allocate().then(result => {
     allocation = result;
     if (finished) return;
-    global.exports['screenshot-basic'].requestClientScreenshot(player, {
-      encoding: 'jpg', quality: 0.85
-    }, async (error, data) => {
+    stage = 'screenshot';
+    global.exports.screencapture.serverCapture(player, {
+      // ScreenCapture forwards this to canvas.toBlob; image/jpg falls back to PNG.
+      encoding: 'jpeg', quality: 0.85, maxWidth: 1920, maxHeight: 1080
+    }, async data => {
       if (processing) return;
       processing = true;
       if (finished) { await store.discardUnfinished(allocation.id).catch(() => {}); return; }
-      if (error) { complete('Screenshot upload failed', null); await store.discardUnfinished(allocation.id).catch(() => {}); return; }
       try {
-        // Screenshot-basic transfers over its HTTP handler and returns bytes only
-        // between server resources. Write inside our own resource to avoid needing
-        // cross-resource filesystem permissions. Nothing is sent in net events.
+        stage = 'decode';
+        // ScreenCapture returns the data URI through its server callback; bytes only
+        // pass between server resources. Write inside our own resource to avoid needing
+        // cross-resource filesystem permissions. Our net events carry no image bytes.
         if (typeof data !== 'string' || data.length > Math.ceil(store.maxBytes / 3) * 4 + 64) throw new Error('Invalid screenshot size');
         const match = /^data:image\/(?:jpeg|jpg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(data);
         if (!match) throw new Error('Invalid screenshot encoding');
+        stage = 'write-image';
         await fs.writeFile(allocation.fileName, Buffer.from(match[1], 'base64'), {flag:'wx'});
         let hosting;
+        stage = 'validate-image';
         const {image} = await store.validateCapture(allocation.id, metadata);
         if (finished) return;
         if (typeof progress === 'function') progress('captured');
+        stage = 'upload';
         if (provider === 'fivemanage') hosting = await uploadJpeg(image, allocation.id, apiKey, {signal:controller.signal});
         if (finished) return;
+        stage = 'save-record';
         const photo = await store.finalize(allocation.id, metadata, hosting);
         complete(null, photo);
       } catch (error) {
-        const reason = typeof error?.message === 'string' && error.message.startsWith('FiveManage') ? error.message : 'Capture storage failed';
-        if (!finished) console.warn(`[d-photomode] ${reason} (photo ${allocation.id}).`);
-        complete('Capture could not be stored', null);
+        if (!finished) report(error);
+        const message = stage === 'upload' ? 'Image hosting failed. Ask staff to check the server log.' : stage === 'decode' || stage === 'validate-image' ? 'Screenshot format or size is unsupported.' : 'Photo storage failed. Ask staff to check the server log.';
+        complete(message, null);
         await store.discardUnfinished(allocation.id).catch(() => {});
       }
-    });
-  }).catch(() => complete('Capture could not start', null));
+    }, 'base64');
+  }).catch(error => {
+    if (!finished) report(error);
+    complete('Capture could not start. Ask staff to check the server log.', null);
+  });
 });
 exports('cancelPhotoCapture', player => cancellations.get(player)?.());
 exports('readPhotoRecord', (id, callback) => {

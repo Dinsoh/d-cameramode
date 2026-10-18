@@ -61,3 +61,20 @@ test('confirmed refund has a guarded recovery transition; ambiguous states canno
   await store.settleDelivery(item.id,metadata.owner,'refunded');
   await assert.rejects(store.settleDelivery(item.id,metadata.owner,'refunding'));
 }));
+
+test('publication works without hard links or syncing a read-only JPEG handle',async t=>fixture(async(store)=>{
+  t.mock.method(fs,'link',async()=>{throw Object.assign(new Error('sandbox link blocked'),{code:'EPERM'});});
+  const open=fs.open.bind(fs);
+  t.mock.method(fs,'open',async(file,flags,...rest)=>{
+    assert.ok(!String(file).endsWith('.jpg') || flags!=='r','Windows requires write access for image flush');
+    return open(file,flags,...rest);
+  });
+  const item=await store.allocate(); await fs.writeFile(item.fileName,Buffer.from([255,216,1,2,255,217]));
+  const outcomes=await Promise.allSettled([store.finalize(item.id,metadata),store.finalize(item.id,metadata)]);
+  assert.equal(outcomes.filter(result=>result.status==='fulfilled').length,1);
+  assert.equal((await store.read(item.id)).owner,metadata.owner);
+  await store.prepareDelivery(item.id,metadata.owner,false);
+  await store.settleDelivery(item.id,metadata.owner,'delivered');
+  assert.equal((await store.delivery(item.id)).phase,'delivered');
+  assert.equal((await fs.readdir(store.directory)).filter(name=>name.endsWith('.tmp')).length,0);
+}));

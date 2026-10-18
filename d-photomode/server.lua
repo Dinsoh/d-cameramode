@@ -225,7 +225,9 @@ RegisterNetEvent('d-photomode:captureReady', function(id, captureId)
     c.phase, c.deadline = 'uploading', os.time() + 45
     exports[resource]:capturePhotoToStorage(src, c.metadata, function(error, photo)
         if sessions[src] ~= s or s.capture ~= c or c.phase ~= 'uploading' then return end
-        if error or type(photo) ~= 'table' then result(src, s, c, false, 'Capture or upload failed. No film was charged.') return end
+        if error or type(photo) ~= 'table' then
+            result(src, s, c, false, (type(error) == 'string' and error or 'Capture or upload failed.') .. ' No film was charged.') return
+        end
         if not captureValid(src, s, c) then result(src, s, c, false, 'Printing cancelled. No film was charged.') return end
         c.phase, c.deadline = 'printing', os.time() + math.ceil(Config.PrintMilliseconds / 1000) + 10
         TriggerClientEvent('d-photomode:printing', src, id, captureId, Config.PrintMilliseconds)
@@ -285,7 +287,7 @@ AddEventHandler('qb-inventory:server:itemRemoved', function(src, name) if name =
 RegisterNetEvent('d-photomode:inventoryChanged', function() queueInventoryCheck(source) end)
 RegisterNetEvent('d-photomode:closePhoto', function() viewedPhotos[source] = nil end)
 AddEventHandler('onResourceStop', function(name)
-    if name == resource or name == Config.InventoryResource or name == 'qb-core' then
+    if name == resource or name == Config.InventoryResource or name == 'qb-core' or name == 'screencapture' then
         for src in pairs(sessions) do stop(src) end
         for src in pairs(viewedPhotos) do TriggerClientEvent('d-photomode:closePhoto', src) end
         viewedPhotos = {}

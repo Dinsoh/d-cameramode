@@ -53,4 +53,47 @@ with sync_playwright() as p:
     assert page.locator('#captureMessage').inner_text()=='Photograph printed.'
     page.evaluate("window.postMessage({action:'close'},'*')"); page.locator('#frame').wait_for(state='hidden')
     print('PASS: UI open/update, grid, reset, hide/restore, exit, 720p fit, close')
+    # New eye-level mode: a clean viewfinder by default, settings opt in.
+    page.set_viewport_size({'width':1280,'height':720})
+    page.evaluate("window.postMessage({action:'open',viewfinder:true,orbit:{distance:{min:0.5,max:6,default:2},height:{min:-1,max:3,default:0.2}},fov:{min:20,max:90,default:70},tilt:15,filters:[{label:'Natural'}],dof:false,hideKey:'H'},'*')")
+    page.locator('#viewfinderHud').wait_for(state='visible')
+    assert page.locator('#panel').is_hidden()
+    assert page.locator('#lensValue').inner_text()=='1.0×'
+    page.evaluate("window.postMessage({action:'lens',fov:35},'*')")
+    page.wait_for_function("document.getElementById('fov').value==='35'")
+    assert page.locator('#lensValue').inner_text()=='2.2×'
+    page.evaluate("window.postMessage({action:'settings',open:true},'*')")
+    page.locator('#panel').wait_for(state='visible')
+    assert page.locator('#orbit').is_hidden()
+    page.locator('#cameraMode').select_option('selfie'); page.locator('#cameraMode').dispatch_event('input')
+    page.locator('#orbit').wait_for(state='visible')
+    page.locator('#cameraPose').uncheck()
+    page.locator('#distance').fill('5.61'); page.locator('#distance').dispatch_event('input')
+    page.locator('#height').fill('2.87'); page.locator('#height').dispatch_event('input')
+    page.wait_for_timeout(150)
+    assert page.evaluate("calls.some(c=>c[1].mode==='selfie'&&c[1].pose===false&&c[1].distance===5.61&&c[1].height===2.87)")
+    page.locator('#tabFrame').click()
+    page.locator('#caption').fill('A photo with H and Return')
+    before=page.evaluate('calls.length')
+    page.locator('#caption').press('h')
+    page.wait_for_timeout(50)
+    assert page.evaluate('calls.length')==before
+    page.evaluate("window.postMessage({action:'settings',open:false},'*')")
+    page.locator('#panel').wait_for(state='hidden')
+    page.evaluate("window.postMessage({action:'prepareCapture',id:11},'*')")
+    page.locator('#frame').wait_for(state='hidden')
+    page.wait_for_function("calls.some(c=>c[0].endsWith('/captureReady')&&c[1].id===11)")
+    assert page.locator('#fov').input_value()=='35'
+    page.evaluate("window.postMessage({action:'captureResult',ok:true,hidden:false},'*')")
+    page.locator('#viewfinderHud').wait_for(state='visible')
+    assert page.locator('#panel').is_hidden()
+    assert page.locator('#fov').input_value()=='35'
+    page.evaluate("window.postMessage({action:'close'},'*')")
+    page.locator('#frame').wait_for(state='hidden')
+    print('PASS: clean viewfinder, lens sync, optional settings, caption typing, clean capture and lens preservation')
+    # Reproduce the upstream canvas MIME issue in real Chromium, not a mocked encoder.
+    encoding = page.evaluate("async()=>{const c=document.createElement('canvas');c.width=16;c.height=16;const encode=type=>new Promise(resolve=>c.toBlob(async blob=>resolve({type:blob.type,bytes:Array.from(new Uint8Array(await blob.arrayBuffer())).slice(0,3)}),type,0.85));return {jpg:await encode('image/jpg'),jpeg:await encode('image/jpeg')}}")
+    assert encoding['jpg']['type']=='image/png'
+    assert encoding['jpeg']['type']=='image/jpeg' and encoding['jpeg']['bytes'][:2]==[255,216]
+    print('PASS: real canvas confirms jpg falls back to PNG; jpeg produces actual JPEG bytes')
     b.close()

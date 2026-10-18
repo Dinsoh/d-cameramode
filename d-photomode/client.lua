@@ -1,5 +1,7 @@
 local state, pending, viewing = nil, false, false
 local resource = GetCurrentResourceName()
+local viewfinder = Config.Viewfinder or {}
+local firstPerson = viewfinder.enabled ~= false
 
 local function closePhoto()
     if not viewing then return end
@@ -123,11 +125,18 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
         notify('Finish the current screen effect before using photo mode.')
         return
     end
+    local orbitSettings = orbit
     local origin, position = GetEntityCoords(ped), GetGameplayCamCoord()
+    if firstPerson then
+        local head = GetPedBoneCoords(ped, 31086, 0.0, 0.0, 0.0)
+        position = vector3(head.x, head.y, head.z + 0.05)
+        orbit = nil
+    end
     if #(position - origin) > Config.MaxCameraDistance then
         TriggerServerEvent('d-photomode:finish', id) return
     end
     local entryFov = (Config.Fov.preserveGameplay ~= false) and GetGameplayCamFov() or Config.Fov.default
+    if firstPerson then entryFov = tonumber(viewfinder.fov) or 70.0 end
     if type(entryFov) ~= 'number' or entryFov ~= entryFov or entryFov <= 0 or entryFov > 130 then
         entryFov = Config.Fov.default
     end
@@ -135,11 +144,13 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
     -- slider range, so starting/resetting photo mode never introduces a zoom jump.
     local fovBounds = { min = math.min(Config.Fov.min, entryFov),
         max = math.max(Config.Fov.max, entryFov), default = entryFov }
-    local s = { id = id, ped = ped, origin = origin, orbit = orbit, angle = 0.0,
-        distance = orbit and orbit.distance.default, height = orbit and orbit.height.default, nextCollision = 0, rotation = GetGameplayCamRot(2),
+    local s = { id = id, ped = ped, origin = origin, orbit = orbit, orbitSettings = orbitSettings, eyePosition = position, selfie = orbit ~= nil, angle = 0.0,
+        distance = orbitSettings and orbitSettings.distance.default, height = orbitSettings and orbitSettings.height.default, nextCollision = 0, rotation = GetGameplayCamRot(2),
         fov = entryFov, fovBounds = fovBounds, tilt = 0.0, dof = false, focus = 5.0,
         strength = Config.FilterStrength or 0.65, dofStrength = 0.5,
-        radar = not IsRadarHidden(), hidden = false, expires = GetGameTimer() + seconds * 1000 }
+        radar = not IsRadarHidden(), hidden = false, settings = not firstPerson, compact = firstPerson, expires = GetGameTimer() + seconds * 1000 }
+    s.rotation = { x = math.max(-80.0, math.min(80.0, s.rotation.x)), z = s.rotation.z }
+    s.eyeRotation = { x = s.rotation.x, z = s.rotation.z }
     state = s
     local ok, err = pcall(function()
         if not equipCamera(s) then return end
@@ -151,10 +162,10 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
         apply(s)
         SetCamActive(s.cam, true)
         RenderScriptCams(true, false, 0, true, false)
-        SetNuiFocus(true, true)
+        SetNuiFocus(s.settings, s.settings)
         SetNuiFocusKeepInput(false)
         SendNUIMessage({ action = 'open', fov = fovBounds, strength = Config.FilterStrength or 0.65, tilt = Config.MaxTilt,
-            filters = Config.Filters, dof = Config.EnableDof, hideKey = Config.HideKey, captureKey = Config.CaptureKey, captionLength = Config.CaptionLength, orbit = orbit or false })
+            filters = Config.Filters, dof = Config.EnableDof, hideKey = Config.HideKey, captureKey = Config.CaptureKey, captionLength = Config.CaptionLength, viewfinder = firstPerson, orbit = orbitSettings or false })
     end)
     if not ok then
         cleanup(s.endReason or 'Photo mode could not start')
@@ -178,6 +189,31 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
                 end
                 -- Block movement/combat only while active. No entity freezing or teleportation.
                 DisableAllControlActions(0)
+                if s.compact then
+                    -- Frame-local visibility affects only this client's view. Other
+                    -- players still see the photographer holding their camera.
+                    if not s.selfie then SetEntityLocallyInvisible(s.ped) end
+                    if not s.selfie or not s.pose then SetEntityLocallyInvisible(s.prop) end
+                    if not s.settings and not s.captureRequested and not s.captureId then
+                        local speed = math.max(0.1, math.min(20.0, tonumber(viewfinder.sensitivity) or 8.0)) * s.fov / 70.0
+                        local dx, dy = GetDisabledControlNormal(0, 1), GetDisabledControlNormal(0, 2)
+                        if s.selfie then
+                            s.angle = ((s.angle - dx * speed + 180.0) % 360.0) - 180.0
+                            s.height = math.max(s.orbit.height.min, math.min(s.orbit.height.max, s.height - dy * 0.1))
+                            if dx ~= 0 or dy ~= 0 then
+                                orbitPosition(s)
+                                SendNUIMessage({action = 'orbitPosition', angle = s.angle, height = s.height})
+                            end
+                        else
+                            s.rotation.z = (s.rotation.z - dx * speed) % 360
+                            s.rotation.x = math.max(-80.0, math.min(80.0, s.rotation.x - dy * speed))
+                        end
+                        local zoom = IsDisabledControlJustPressed(0, 241) and -2.0 or (IsDisabledControlJustPressed(0, 242) and 2.0 or 0)
+                        s.fov = math.max(s.fovBounds.min, math.min(s.fovBounds.max, s.fov + zoom))
+                        if dx ~= 0 or dy ~= 0 or zoom ~= 0 then apply(s) end
+                        if zoom ~= 0 then SendNUIMessage({action = 'lens', fov = s.fov}) end
+                    end
+                end
                 EnableControlAction(0, 249, true) -- voice
                 HideHudAndRadarThisFrame()
                 if s.dof then SetUseHiDof() end
@@ -213,13 +249,20 @@ RegisterCommand('photomode_exit', function() cleanup() end, false)
 RegisterKeyMapping('photomode_exit', 'Exit photography mode', 'keyboard', Config.ExitKey)
 local function hide()
     if not state or state.captureRequested or state.captureId then return end
+    if state.compact then
+        state.settings = not state.settings
+        SendNUIMessage({action = 'settings', open = state.settings})
+        SetNuiFocus(state.settings, state.settings)
+        SetNuiFocusKeepInput(false)
+        return
+    end
     state.hidden = not state.hidden
     SendNUIMessage({ action = 'hidden', hidden = state.hidden })
     SetNuiFocus(not state.hidden, not state.hidden)
     SetNuiFocusKeepInput(false)
 end
 RegisterCommand('photomode_hide', hide, false)
-RegisterKeyMapping('photomode_hide', 'Hide photo overlay', 'keyboard', Config.HideKey)
+RegisterKeyMapping('photomode_hide', firstPerson and 'Toggle camera settings' or 'Hide photo overlay', 'keyboard', Config.HideKey)
 
 RegisterNUICallback('close', function(_, cb) cleanup() cb({ ok = true }) end)
 RegisterNUICallback('hide', function(_, cb) hide() cb({ ok = true }) end)
@@ -237,14 +280,34 @@ RegisterNUICallback('update', function(data, cb)
     s.strength = number(data.strength, 0.0, 1.0, s.strength)
     s.dofStrength = number(data.dofStrength, 0.0, 1.0, s.dofStrength)
     s.dof = Config.EnableDof and data.dof == true
-    if s.orbit then
+    if s.orbitSettings then
         s.angle = number(data.angle, -180.0, 180.0, s.angle)
-        s.distance = number(data.distance, s.orbit.distance.min, s.orbit.distance.max, s.distance)
-        s.height = number(data.height, s.orbit.height.min, s.orbit.height.max, s.height)
+        s.distance = number(data.distance, s.orbitSettings.distance.min, s.orbitSettings.distance.max, s.distance)
+        s.height = number(data.height, s.orbitSettings.height.min, s.orbitSettings.height.max, s.height)
     end
     local index = number(data.filter, 1, #Config.Filters, 1)
     local preset = Config.Filters[math.floor(index)]
     local ok = pcall(function()
+        if s.compact and (data.mode == 'camera' or (data.mode == 'selfie' and s.orbitSettings)) then
+            local selfie = data.mode == 'selfie'
+            if selfie ~= s.selfie then
+                if selfie then
+                    s.eyeRotation = { x = s.rotation.x, z = s.rotation.z }
+                    s.orbit = s.orbitSettings
+                else
+                    s.orbit = nil
+                    s.rotation = { x = s.eyeRotation.x, z = s.eyeRotation.z }
+                    SetCamCoord(s.cam, s.eyePosition.x, s.eyePosition.y, s.eyePosition.z)
+                end
+                s.selfie = selfie
+            end
+        end
+        if type(data.pose) == 'boolean' and data.pose ~= s.pose then
+            if data.pose then
+                TaskPlayAnim(s.ped, s.dictionary, Config.Prop.animation, 8.0, -8.0, -1, 49, 0.0, false, false, false)
+            else StopAnimTask(s.ped, s.dictionary, Config.Prop.animation, 1.0) end
+            s.pose = data.pose
+        end
         if preset and preset.modifier then
             if s.modifier ~= preset.modifier then SetExtraTimecycleModifier(preset.modifier) end
             SetExtraTimecycleModifierStrength(s.strength)
@@ -259,7 +322,7 @@ RegisterNUICallback('update', function(data, cb)
     if not ok then cleanup(s.endReason or 'Photo controls could not be applied') end
     cb({ ok = ok })
 end)
-AddEventHandler('onResourceStop', function(name) if name == resource or name == 'qb-core' or name == Config.InventoryResource then cleanup() end end)
+AddEventHandler('onResourceStop', function(name) if name == resource or name == 'qb-core' or name == 'screencapture' or name == Config.InventoryResource then cleanup() end end)
 
 -- This display event is for the authoritative inventory/photo-record handler only.
 -- No client request to view by ID is registered until inventory ownership can be checked.
@@ -327,7 +390,8 @@ RegisterNetEvent('d-photomode:captureResult', function(id, captureId, ok, messag
     if source ~= 65535 or not s or s.id ~= id or (s.captureId and captureId ~= s.captureId) then return end
     s.captureId, s.captureRequested, s.captureReady = nil, false, false
     SendNUIMessage({action = 'captureResult', ok = ok, message = message, hidden = s.hidden})
-    SetNuiFocus(not s.hidden, not s.hidden)
+    local focus = s.compact and s.settings or (not s.compact and not s.hidden)
+    SetNuiFocus(focus, focus)
     SetNuiFocusKeepInput(false)
 end)
 RegisterCommand('photomode_capture', function()

@@ -7,6 +7,8 @@ Config = {
     CaptureCooldownSeconds = 10,
     PrintMilliseconds = 1800,
     CaptionLength = 80,
+    -- Fixed eye-level view; no flight or movement controls. H opens settings.
+    Viewfinder = { enabled = true, fov = 70.0, sensitivity = 8.0 },
     Prop = { model = 'prop_pap_camera_01', bone = 28422,
         offset = { x = 0.0, y = 0.0, z = 0.0 }, rotation = { x = 0.0, y = 0.0, z = 0.0 },
         dictionary = 'amb@world_human_paparazzi@male@base', animation = 'base' },
@@ -16,13 +18,13 @@ Config = {
     SessionSeconds = 180,
     StartCooldownSeconds = 5,
     MaxPedDisplacement = 1.5,
-    MaxCameraDistance = 5.0,
+    MaxCameraDistance = 8.0,
     Fov = { min = 20.0, max = 90.0, default = 60.0, preserveGameplay = true },
     MaxTilt = 15.0,
     FilterStrength = 0.65,
-    -- Enable only for owner-approved FINI staging tests; anchored tests do not verify orbit.
-    Orbit = { enabled = false, distance = { min = 1.0, max = 3.0, default = 2.0 },
-        height = { min = -0.4, max = 1.5, default = 0.2 }, targetHeight = 0.7 },
+    -- Self portraits stay inside this bounded orbit; verify the expanded range with FINI.
+    Orbit = { enabled = true, distance = { min = 0.5, max = 6.0, default = 2.0 },
+        height = { min = -1.0, max = 3.0, default = 0.2 }, targetHeight = 0.7 },
     EnableDof = false, -- renderer dependent; validate with your graphics settings
     -- Camera ownership is the default access gate. Set true for an ACE-only staging test.
     RequireAce = false,

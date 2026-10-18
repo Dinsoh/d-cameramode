@@ -4,7 +4,7 @@ import unittest
 from lupa.lua54 import LuaRuntime
 ROOT=Path(__file__).resolve().parents[1]/'d-photomode'
 class Client(unittest.TestCase):
-    def setUp(self):
+    def setUp(self, first_person=False):
         self.lua=LuaRuntime()
         self.lua.execute('''
         events, commands, callbacks, handlers, calls = {}, {}, {}, {}, {}
@@ -28,7 +28,11 @@ class Client(unittest.TestCase):
         function GetTimecycleModifierIndex() return -1 end
         function GetExtraTimecycleModifierIndex() return -1 end
         local v={__sub=function() return setmetatable({},{__len=function() return displacement end}) end}
-        function GetEntityCoords() return setmetatable({},v) end
+        function GetEntityCoords() return setmetatable({x=0,y=0,z=0},v) end
+        function GetPedBoneCoords() return vector3(0,0,1.7) end
+        function SetEntityLocallyInvisible(entity) invisible=invisible or {}; invisible[entity]=true end
+        function GetDisabledControlNormal(_,axis) return axis==1 and (mouseX or 0) or (mouseY or 0) end
+        function IsDisabledControlJustPressed(_,control) return control==scroll end
         GetGameplayCamCoord=GetEntityCoords
         function GetGameplayCamFov() return gameplayFov or 70.0 end
         function GetGameplayCamRot() return {x=2,y=0,z=30} end
@@ -75,9 +79,9 @@ class Client(unittest.TestCase):
             commands.photomode()
             events['d-photomode:grant'](1,180,{origin={x=0,y=0,z=0},heading=0,
                 distance=Config.Orbit.distance,height=Config.Orbit.height,
-                targetHeight=0.7,maxDistance=5})
+                targetHeight=0.7,maxDistance=Config.MaxCameraDistance})
         end
-        function SetCamRot() end
+        function SetCamRot(_,pitch,roll,yaw) camPitch=pitch; camYaw=yaw end
         function SetCamFov(_,n) fov=n end
         function SetCamUseShallowDofMode() end
         function SetCamNearDof(_,n) nearFocus=n end
@@ -105,7 +109,34 @@ class Client(unittest.TestCase):
         function cb(result) response=result end
         ''')
         self.lua.execute((ROOT/'config.lua').read_text())
+        if first_person == 'legacy_config': self.lua.execute('Config.Viewfinder=nil')
+        elif not first_person: self.lua.execute('Config.Viewfinder.enabled=false')
         self.lua.execute((ROOT/'client.lua').read_text())
+    def test_eye_level_view_opens_without_cursor_or_third_person_zoom(self):
+        self.setUp(True)
+        self.lua.execute("gameplayFov=30; enter(); assert(rendering and not focused and fov==70); assert(math.abs(camera.z-1.75)<0.001 and camera.x==0 and camera.y==0); assert(message.viewfinder)")
+    def test_aim_clamps_pitch_and_scroll_changes_only_lens(self):
+        self.setUp(True)
+        self.lua.execute("enter(); mouseX=1; mouseY=100; scroll=241; tick(); assert(fov==68 and invisible[12] and invisible[55]); assert(camera.x==0 and camera.y==0 and math.abs(camera.z-1.75)<0.001); assert(camPitch==-80 and camYaw~=30); commands.photomode_hide(); assert(focused and message.action=='settings' and message.open); local previous=fov; tick(); assert(fov==previous); commands.photomode_hide(); assert(not focused)")
+    def test_shutter_does_not_zoom_or_move_view_and_restores_aim(self):
+        self.setUp(True)
+        self.lua.execute("source=65535; enter(); scroll=241; tick(); assert(fov==68); callbacks.capture({},cb); events['d-photomode:prepareCapture'](1,9); mouseX=10; tick(); assert(fov==68 and math.abs(camera.z-1.75)<0.001); callbacks.captureReady({id=9},cb); events['d-photomode:captured'](1,9); events['d-photomode:captureResult'](1,9,true,'Printed'); assert(fov==68 and not focused); commands.photomode_exit(); assert(not rendering and propDeleted)")
+    def test_legacy_config_defaults_to_viewfinder(self):
+        self.setUp('legacy_config')
+        # The current default also applies when an installer retains the older config.
+        self.lua.execute("enterOrbit(); assert(message.viewfinder and message.orbit and camera.y==0 and not focused)")
+    def test_self_portrait_switch_pose_off_fine_controls_and_return(self):
+        self.setUp(True)
+        self.lua.execute("enterOrbit(); assert(camera.y==0 and pose); commands.photomode_hide(); callbacks.update({mode='selfie',pose=false,angle=27.3,distance=5.61,height=2.87,fov=70},cb); assert(response.ok and not pose); local radius=math.sqrt(camera.x^2+camera.y^2); assert(math.abs(radius-5.61)<0.001 and math.abs(camera.z-3.57)<0.001); invisible={}; tick(); assert(not invisible[12] and invisible[55]); callbacks.update({mode='camera',pose=true,fov=70},cb); assert(pose and camera.y==0 and math.abs(camera.z-1.75)<0.001 and fov==70); invisible={}; tick(); assert(invisible[12]); commands.photomode_exit(); assert(not pose and propDeleted)")
+    def test_self_portrait_requires_server_orbit_grant(self):
+        self.setUp(True)
+        self.lua.execute("enter(); callbacks.update({mode='selfie',pose=false},cb); tick(); assert(camera.y==0 and invisible[12] and not pose)")
+    def test_capture_blocks_mode_and_animation_changes(self):
+        self.setUp(True)
+        self.lua.execute("source=65535; enterOrbit(); callbacks.capture({},cb); events['d-photomode:prepareCapture'](1,9); callbacks.update({mode='selfie',pose=false},cb); assert(not response.ok and pose and camera.y==0 and fov==70)")
+    def test_capture_dependency_stop_cleans_viewfinder(self):
+        self.setUp(True)
+        self.lua.execute("enter(); handlers.onResourceStop('screencapture'); assert(destroyed and propDeleted and not focused and not rendering and not pose)")
     def test_invalid_camera_model_releases_session(self):
         self.lua.execute("Config.Prop.model='prop_pap_camera'; enter(); assert(not rendering and not focused); assert(message.action=='close'); assert(calls[#calls][1]=='d-photomode:finish')")
     def test_entry_and_idempotent_cleanup(self):
@@ -121,7 +152,7 @@ class Client(unittest.TestCase):
     def test_unsolicited_grant_does_not_enter(self):
         self.lua.execute("events['d-photomode:grant'](1,180); assert(not rendering and calls[1][1]=='d-photomode:finish')")
     def test_orbit_presets_and_clamps(self):
-        self.lua.execute("enterOrbit(); assert(math.abs(camera.y-2)<0.001); callbacks.update({angle=180,distance=999,height=999},cb); assert(response.ok and math.abs(camera.y+3)<0.001 and math.abs(camera.z-2.2)<0.001)")
+        self.lua.execute("enterOrbit(); assert(math.abs(camera.y-2)<0.001); callbacks.update({angle=180,distance=999,height=999},cb); assert(response.ok and math.abs(camera.y+6)<0.001 and math.abs(camera.z-3.7)<0.001)")
     def test_collision_insets_camera(self):
         self.lua.execute("blocked=true; enterOrbit(); assert(rendering and math.abs(camera.y-0.8)<0.001)")
     def test_collision_rechecked_when_active(self):

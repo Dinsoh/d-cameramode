@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+- Use the installed `screencapture` resource's native serverCapture API directly. Request canvas-compatible `jpeg` encoding to avoid JPEG-labelled PNG captures, with a bounded 1920×1080 size preserving aspect ratio.
+- Eye-level item camera with mouse aiming, wheel zoom, compact viewfinder and optional settings panel; no flying or player movement. Initial lens is 70° and shutter preserves framing.
+- Player-selectable Self portrait with camera-pose toggle, expanded bounded/collision-checked orbit (0.5–6 m distance, −1–3 m height), and fine angle/roll/distance/height adjustments.
+- Hide photographer/prop only in their own eye-level view; show the character again for self portraits. The prop is omitted from self portraits when the pose is disabled.
+- Replace hard-link publication with locked temporary-file rename and use a writable JPEG flush handle for Windows. Capture failures now report safe operation stages/codes instead of a generic storage warning.
+- Automated lifecycle/UI/storage checks pass; live capture, visual framing and FINI compatibility require server QA.
+
 ## 0.3.1
 - Correct the default handheld model to `prop_pap_camera_01`; the previous nonexistent name prevented camera entry. Existing installations must update `Config.Prop.model` when retaining their config.
 

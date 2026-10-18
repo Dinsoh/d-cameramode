@@ -21,7 +21,7 @@ node --check d-photomode/storage.js
 node --check d-photomode/fivemanage.js
 ```
 
-Lua tests explicitly use `lupa.lua54`. Browser checks use `/usr/bin/chromium` and mocked FiveM NUI transport. Backend bridge tests exercise actual storage code and simulated screenshot-basic/HTTPS callbacks. They use test fixtures only, never a placeholder in a finished player photo.
+Lua tests explicitly use `lupa.lua54`. Browser checks use `/usr/bin/chromium` and mocked FiveM NUI transport. Backend bridge tests exercise actual storage code and simulated screencapture/HTTPS callbacks. They use test fixtures only, never a placeholder in a finished player photo.
 
 Optional private vendor contract check:
 
@@ -35,7 +35,7 @@ Coverage: entry permissions and camera ownership, FOV preservation, focus/zoom i
 
 ## Required in-game matrix (pending)
 
-Use staging with FINI enabled and a normal player account. Record server artifact, QB/QS/screenshot-basic versions, graphics mods, resolution, hardware, FiveManage configuration (names/status only), and actual FINI outcomes. Set the optional ACE gate for a restricted rollout if needed. Stop on an anticheat alert; do not suppress or bypass detections.
+Use staging with FINI enabled and a normal player account. Record server artifact, QB/QS/screencapture versions, graphics mods, resolution, hardware, FiveManage configuration (names/status only), and actual FINI outcomes. Set the optional ACE gate for a restricted rollout if needed. Stop on an anticheat alert; do not suppress or bypass detections.
 
 | Scenario | Expected result |
 | --- | --- |
@@ -68,3 +68,12 @@ Use staging with FINI enabled and a normal player account. Record server artifac
 Back up `data/photos/` and relevant inventory persistence before intentional crash/recovery testing. File records and QS database saves are separate: inspect ambiguous journals/inventory before any manual reissue. Provider/account/manual deletion can break links despite non-expiring URLs and retention exemption.
 
 Status: actual game captures, live FiveManage key/upload, deployed inventory SQL persistence, FINI compatibility and performance values are **pending / not measured**.
+
+## 0.4 viewfinder / self-portrait QA (in-game pending)
+
+- Open from different third-person zooms: consistent 70° eye view, photographer/prop absent only on the local view, other players still see the photographer; no flying/movement. Mouse aims, wheel zooms.
+- Photograph at 70°, zoom in, and photograph again: each image matches its live framing, with no shutter zoom or UI/cursor artifacts.
+- H opens settings; choose Self portrait, switch Hold camera pose off/on, and return to Camera. Check animation/prop/character visibility and preservation of previous aiming direction. Repeat after failed/successful uploads.
+- Test 0.5–6 m distance, −1–3 m height, full 360° orbit and fine steps (keyboard arrows on sliders) near floors/walls, indoors and under ceilings. Camera must respect collision and 8 m bound. Test with FINI enabled.
+- Escape, death, item loss and resource restart release focus and leave character/prop/animation/rendering clean in either view, including with pose disabled.
+- On the actual Windows/Linux host, capture and deliver a photo and reopen it after resource restart. Check saved records/journals. If capture fails, retain only the stage/error-code line; no keys/private provider bodies. Check writable resource data directory and disk capacity. The earlier generic warning is insufficient to determine its exact cause.

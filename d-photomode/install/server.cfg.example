@@ -7,5 +7,5 @@ set d_photomode_max_uploads "4"
 # Keep your existing QB/QS prerequisites and start each resource only once.
 ensure qb-core
 ensure qs-inventory
-ensure screenshot-basic
+ensure screencapture
 ensure d-photomode

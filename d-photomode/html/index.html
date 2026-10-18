@@ -5,6 +5,7 @@
 <div id="frame" hidden>
   <div id="bars" hidden></div>
   <div id="grid" hidden><i></i><i></i><i></i><i></i></div>
+  <div id="viewfinderHud" hidden><span class="focus-corner top-left"></span><span class="focus-corner top-right"></span><span class="focus-corner bottom-left"></span><span class="focus-corner bottom-right"></span><div class="viewfinder-controls"><span id="lensValue">1.0×</span><span id="viewfinderHint"></span></div></div>
   <main id="panel">
     <header><div><small>DINSOH DEVELOPMENT</small><h1>Photography</h1></div><button id="close" aria-label="Exit photography">×</button></header>
     <div class="tabs" role="tablist" aria-label="Photo controls">
@@ -13,14 +14,16 @@
       <button id="tabFrame" data-tab="frame" role="tab" aria-selected="false" aria-controls="frameSettings">Frame</button>
     </div>
     <section id="cameraSettings" role="tabpanel" aria-labelledby="tabCamera">
+      <label id="viewControl">View<select id="cameraMode"><option value="camera">Camera</option><option value="selfie">Self portrait</option></select></label>
+      <label class="row"><span>Hold camera pose</span><input id="cameraPose" type="checkbox" checked></label>
       <section id="orbit" hidden>
         <div class="angles" aria-label="Camera angles"><button data-angle="0">Front</button><button data-angle="90">Left</button><button data-angle="180">Back</button><button data-angle="-90">Right</button></div>
-        <label>Angle <output id="angleValue"></output><input id="angle" type="range" min="-180" max="180" step="1" value="0"></label>
-        <label>Distance <output id="distanceValue"></output><input id="distance" type="range" step="0.05"></label>
-        <label>Height <output id="heightValue"></output><input id="height" type="range" step="0.05"></label>
+        <label>Angle <output id="angleValue"></output><input id="angle" type="range" min="-180" max="180" step="0.1" value="0"></label>
+        <label>Distance <output id="distanceValue"></output><input id="distance" type="range" step="0.01"></label>
+        <label>Height <output id="heightValue"></output><input id="height" type="range" step="0.01"></label>
       </section>
       <label>Zoom · field of view <output id="fovValue"></output><input id="fov" type="range" step="0.1"></label>
-      <label>Roll <output id="tiltValue"></output><input id="tilt" type="range" step="1" value="0"></label>
+      <label>Roll <output id="tiltValue"></output><input id="tilt" type="range" step="0.1" value="0"></label>
     </section>
     <section id="lookSettings" role="tabpanel" aria-labelledby="tabLook" hidden>
       <label>Filter<select id="filter"></select></label>

@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 class PhotoStore {
   constructor(directory, publicBase, maxBytes = 4 * 1024 * 1024) {
-    this.directory = directory; this.maxBytes = maxBytes; this.deliveryLocks = new Set();
+    this.directory = directory; this.maxBytes = maxBytes; this.deliveryLocks = new Set(); this.writeLocks = new Set();
     this.publicBase = publicBase ? new URL(publicBase) : null;
     if (this.publicBase && (this.publicBase.protocol !== 'https:' || this.publicBase.username || this.publicBase.password || this.publicBase.search || this.publicBase.hash)) throw new Error('Public image base must be a permanent HTTPS directory URL');
     if (this.publicBase && !this.publicBase.pathname.endsWith('/')) throw new Error('Public image base must end with /');
@@ -37,7 +37,7 @@ class PhotoStore {
       const validated = publicUrl({status:'ok', data:{id:hosting.fileId, url:hosting.url}});
       record.hosting = validated;
     }
-    const imageHandle = await fs.open(imagePath, 'r');
+    const imageHandle = await fs.open(imagePath, 'r+');
     try { await imageHandle.sync(); } finally { await imageHandle.close(); }
     await this.writeJson(id, 'json', record, true);
     return this.publicRecord(record);
@@ -45,15 +45,33 @@ class PhotoStore {
   async writeJson(id, suffix, record, exclusive = false) {
     const temporary = this.file(id, `${suffix}.${randomUUID()}.tmp`);
     const destination = this.file(id, suffix);
-    const fd = await fs.open(temporary, 'wx', 0o600);
-    try { await fd.writeFile(JSON.stringify(record)); await fd.sync(); } finally { await fd.close(); }
+    // All record mutations belong to this server instance. Serialize publication
+    // before checking existence; never depend on sandbox-restricted hard links.
+    if (this.writeLocks.has(destination)) throw new Error('Record write in progress');
+    this.writeLocks.add(destination);
     try {
-      if (exclusive) await fs.link(temporary, destination);
-      else await fs.rename(temporary, destination);
-    } finally { await fs.unlink(temporary).catch(() => {}); }
-    if (process.platform !== 'win32') {
-      const directoryHandle = await fs.open(this.directory, 'r');
-      try { await directoryHandle.sync(); } finally { await directoryHandle.close(); }
+      if (exclusive) {
+        try { await fs.access(destination); throw new Error('Record already exists'); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
+      const fd = await fs.open(temporary, 'wx', 0o600);
+      try { await fd.writeFile(JSON.stringify(record)); await fd.sync(); }
+      finally { await fd.close(); }
+      await fs.rename(temporary, destination);
+      if (process.platform !== 'win32') {
+        // Some resource filesystems cannot open/sync directory descriptors.
+        // File sync and atomic rename remain mandatory on every platform.
+        let directoryHandle;
+        try {
+          directoryHandle = await fs.open(this.directory, 'r');
+          await directoryHandle.sync();
+        } catch (error) {
+          if (!['EINVAL','ENOTSUP','EOPNOTSUPP','ENOSYS','EPERM','EACCES','EISDIR'].includes(error.code)) throw error;
+        } finally { if (directoryHandle) await directoryHandle.close(); }
+      }
+    } finally {
+      await fs.unlink(temporary).catch(() => {});
+      this.writeLocks.delete(destination);
     }
   }
   async delivery(id) { return JSON.parse(await fs.readFile(this.file(id, 'delivery.json'), 'utf8')); }

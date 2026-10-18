@@ -1,5 +1,7 @@
 const $ = id => document.getElementById(id);
 let active = false;
+let viewfinder = false;
+let settingsOpen = true;
 let hideKey = 'H';
 let orbit = false;
 let timer;
@@ -24,7 +26,7 @@ async function post(route, data = {}) {
   finally { clearTimeout(timeout); }
 }
 function values() {
-  return { fov: Number($('fov').value), tilt: Number($('tilt').value),
+  return { mode:$('cameraMode').value, pose:$('cameraPose').checked, fov: Number($('fov').value), tilt: Number($('tilt').value),
     angle: Number($('angle').value), distance: Number($('distance').value), height: Number($('height').value),
     filter: Number($('filter').value), strength: Number($('strength').value), dofStrength: Number($('dofStrength').value), dof: $('dof').checked, focus: Number($('focus').value) };
 }
@@ -32,11 +34,12 @@ function labels() {
   $('strengthValue').textContent = `${Math.round(Number($('strength').value) * 100)}%`;
   $('strength').disabled = $('filter').value === '1';
   $('dofStrengthValue').textContent = `${Math.round(Number($('dofStrength').value) * 100)}%`;
-  $('angleValue').textContent = `${$('angle').value}°`;
+  $('angleValue').textContent = `${Number($('angle').value).toFixed(1)}°`;
   $('distanceValue').textContent = `${Number($('distance').value).toFixed(2)} m`;
   $('heightValue').textContent = `${Number($('height').value).toFixed(2)} m`;
   $('fovValue').textContent = `${$('fov').value}°`;
-  $('tiltValue').textContent = `${$('tilt').value}°`;
+  $('lensValue').textContent = `${(Math.tan(Number($('fov').dataset.default || 70) * Math.PI / 360) / Math.tan(Number($('fov').value) * Math.PI / 360)).toFixed(1)}×`;
+  $('tiltValue').textContent = `${Number($('tilt').value).toFixed(1)}°`;
   $('focusValue').textContent = `${$('focus').value} m`;
 }
 async function flush() {
@@ -53,11 +56,12 @@ async function flush() {
 }
 function update() {
   if (captureRequested) return;
+  $('orbit').hidden = !orbit || (viewfinder && $('cameraMode').value !== 'selfie');
   labels(); dirty = true;
   if (!timer) timer = setTimeout(() => { timer = undefined; flush(); }, 50);
 }
 function reset() {
-  $('angle').value = 0;
+  $('angle').value = 0; $('cameraPose').checked = true;
   if (orbit) { $('distance').value = orbit.distance.default; $('height').value = orbit.height.default; }
   $('fov').value = $('fov').dataset.default;
   $('tilt').value = 0; $('filter').value = 1;
@@ -72,13 +76,16 @@ window.addEventListener('message', ({ data }) => {
   if (!data || typeof data.action !== 'string') return;
   if (data.action === 'open') {
     active = true; hideKey = data.hideKey;
+    viewfinder = Boolean(data.viewfinder); settingsOpen = !viewfinder;
     captureKey = data.captureKey || 'RETURN'; captureRequested = false;
     $('capture').disabled = false;
     $('caption').value = ''; $('caption').maxLength = data.captionLength ?? 80;
     $('captionControl').hidden = (data.captionLength ?? 80) === 0;
     $('captureMessage').textContent = ''; hideCaptureStatus();
     orbit = data.orbit || false;
-    $('orbit').hidden = !orbit;
+    $('cameraMode').value = viewfinder ? 'camera' : 'selfie';
+    $('viewControl').hidden = !viewfinder || !orbit;
+    $('orbit').hidden = !orbit || viewfinder;
     if (orbit) {
       for (const id of ['distance', 'height']) { $(id).min = orbit[id].min; $(id).max = orbit[id].max; }
     }
@@ -91,8 +98,12 @@ window.addEventListener('message', ({ data }) => {
       option.textContent = item.label; return option;
     }));
     $('depth').hidden = !data.dof;
-    $('hint').textContent = `${captureKey} · shutter / ${hideKey} · hide overlay / Escape · exit`;
+    $('hint').textContent = `${captureKey} · shutter / ${hideKey} · ${viewfinder ? 'settings' : 'hide overlay'} / Escape · exit`;
     reset(); selectTab('camera');
+    $('panel').hidden = !settingsOpen; $('viewfinderHud').hidden = !viewfinder;
+    labels();
+    $('viewfinderHint').textContent = `${captureKey} · shutter   /   Scroll · zoom   /   ${hideKey} · settings   /   Escape · exit`;
+    $('hide').textContent = viewfinder ? 'Back to camera' : 'Hide overlay';
   } else if (data.action === 'close') {
     active = false; captureRequested = false; hideCaptureStatus(); $('captureFlash').hidden = true; clearTimeout(timer); timer = undefined; $('frame').hidden = true;
   } else if (data.action === 'prepareCapture') {
@@ -116,11 +127,17 @@ window.addEventListener('message', ({ data }) => {
     captureStatusTimer = setTimeout(hideCaptureStatus, 4500);
   } else if (data.action === 'requestCapture') {
     takePhotograph();
+  } else if (data.action === 'settings') {
+    settingsOpen = Boolean(data.open); $('panel').hidden = !settingsOpen;
+  } else if (data.action === 'orbitPosition') {
+    $('angle').value = data.angle; $('height').value = data.height; labels();
+  } else if (data.action === 'lens') {
+    $('fov').value = data.fov; labels();
   } else if (data.action === 'hidden') {
     $('frame').hidden = data.hidden; // hide guides and bars too for a completely clean screenshot
   }
 });
-for (const id of ['fov', 'tilt', 'filter', 'dof', 'focus', 'angle', 'distance', 'height', 'strength', 'dofStrength']) $(id).addEventListener('input', update);
+for (const id of ['cameraMode', 'cameraPose', 'fov', 'tilt', 'filter', 'dof', 'focus', 'angle', 'distance', 'height', 'strength', 'dofStrength']) $(id).addEventListener('input', update);
 $('showGrid').addEventListener('change', () => { $('grid').hidden = !$('showGrid').checked; });
 $('showBars').addEventListener('change', () => { $('bars').hidden = !$('showBars').checked; });
 $('close').addEventListener('click', () => post('close'));
@@ -128,6 +145,7 @@ $('hide').addEventListener('click', () => { if (!captureRequested) post('hide');
 $('reset').addEventListener('click', () => { if (!captureRequested) { reset(); update(); } });
 window.addEventListener('keydown', event => {
   if (!active || event.repeat) return;
+  if (event.key !== 'Escape' && (event.target.matches('input[type=text], textarea') || event.target.isContentEditable)) return;
   if ((event.key === 'Enter' && captureKey === 'RETURN') || event.key.toUpperCase() === captureKey) { event.preventDefault(); takePhotograph(); }
   if (event.key === 'Escape') { event.preventDefault(); post('close'); }
   // When focused NUI owns keyboard events; game key mapping handles the hidden state.
