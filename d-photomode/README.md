@@ -1,6 +1,6 @@
 # d-photomode · Dinsoh Development
 
-Anchored RP photography for QB-Core. Version 0.2.0, staging release.
+Anchored RP photography for QB-Core. Version 0.2.1, staging release.
 
 ## FINI assessment
 FINI's deployed camera policy is unknown. Scripted camera creation, local grading and DoF still need testing with FINI enabled on a normal player account. Anchoring reduces scope; it does not establish anticheat compatibility. No bypass, detection manipulation, whitelist integration or safety guarantee is included. Orbit controls are included but disabled by default; anchored-mode testing does not establish orbit compatibility. Access defaults to ACE restricted for staging; do not open access before QA.
@@ -40,7 +40,9 @@ Set `Config.Orbit.enabled = false` and restart to restore the anchored-only work
 Only the owned camera is destroyed. Active controls are suppressed without moving/freezing the ped. NUI focus and radar are restored on exit, with HUD suppression lasting only active frames. Camera DoF ends with camera destruction. No streaming focus, weather, time, ped pose or primary timecycle is changed. Entry refuses existing scripted cameras and timecycle effects; an owned extra grade is cleared on exit. Other resources starting camera/extra-grade effects during the session may conflict; coordinate them in staging. No universal effect-ownership API exists.
 
 ## Troubleshooting
-Unavailable: check QB-Core start order, ACE assignment, job filter, death/laststand and vehicle state. Exit before retrying. Start requests have a five-second cooldown. If another screen effect or camera is active, finish it first. Missing blur: verify renderer/graphics settings and EnableDof; turn off if incompatible. Script errors: inspect client F8/server console and provide exact versions and reproduction steps.
+Unavailable: the notification now reports the specific ACE, job, character, death/laststand or vehicle reason. ACE restrictions remain enabled by default. Grant `d-photomode.use` to an existing tester principal, or set `RequireAce = false` for public player access after QA. QB-Core admin status alone does not guarantee the ACE.
+
+A QB-Core `global lib` notification error means its customized notification handler has no initialized ox_lib global in that resource. d-photomode now uses local GTA notices and does not call that handler. Other resources using it may still need QB-Core's own ox_lib integration repaired; starting ox_lib or importing it in d-photomode alone does not initialize QB-Core's Lua globals. Exit before retrying. Start requests have a five-second cooldown. If another screen effect or camera is active, finish it first. Missing blur: verify renderer/graphics settings and EnableDof; turn off if incompatible. Script errors: inspect client F8/server console and provide exact versions and reproduction steps.
 
 ## Validation
 See TEST_PLAN.md. Cloud checks cover Lua parsing, mocked session logic and browser UI only. FiveM natives, deployed QB-Core, FINI, visual presets and renderer behavior are **not validated in game**. Idle/active resmon and concurrency cost: **not measured**. This version requires staging QA before production or a Tebex release.

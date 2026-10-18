@@ -1,6 +1,14 @@
 local state, pending = nil, false
 local resource = GetCurrentResourceName()
 
+-- Resource-local notification: some customized QB-Core handlers assume an
+-- initialized ox_lib global. These native notices need neither QB UI nor ox_lib.
+local function notify(message)
+    BeginTextCommandThefeedPost('STRING')
+    AddTextComponentSubstringPlayerName(message)
+    EndTextCommandThefeedPostTicker(false, false)
+end
+
 local function cleanup(reason)
     local s = state
     state, pending = nil, false
@@ -13,7 +21,7 @@ local function cleanup(reason)
     if s.filter then ClearExtraTimecycleModifier() end
     DisplayRadar(s.radar)
     TriggerServerEvent('d-photomode:finish', s.id)
-    if reason then TriggerEvent('QBCore:Notify', reason, 'primary') end
+    if reason then notify(reason) end
 end
 
 -- Server grant supplies the anchor and limits; NUI never supplies world coordinates.
@@ -69,7 +77,7 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
     -- Never take over another resource's grade. User can retry once it has finished.
     if GetTimecycleModifierIndex() ~= -1 or GetExtraTimecycleModifierIndex() ~= -1 then
         TriggerServerEvent('d-photomode:finish', id)
-        TriggerEvent('QBCore:Notify', 'Finish the current screen effect before using photo mode.', 'error')
+        notify('Finish the current screen effect before using photo mode.')
         return
     end
     local origin, position = GetEntityCoords(ped), GetGameplayCamCoord()
@@ -128,9 +136,9 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
 end)
 
 RegisterNetEvent('d-photomode:stop', function(reason) cleanup(reason) end)
-RegisterNetEvent('d-photomode:denied', function()
+RegisterNetEvent('d-photomode:denied', function(reason)
     pending = false
-    TriggerEvent('QBCore:Notify', 'Photo mode is unavailable. Check permissions and player state.', 'error')
+    notify(type(reason) == 'string' and reason or 'Photo mode is unavailable. Check permissions and player state.')
 end)
 
 RegisterCommand(Config.Command, function()

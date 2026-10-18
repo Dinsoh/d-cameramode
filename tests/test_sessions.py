@@ -55,4 +55,8 @@ class Sessions(unittest.TestCase):
 
     def test_orbit_grant_is_server_controlled(self):
         self.run_lua("start(); assert(emitted[1][5]==nil); events['d-photomode:finish'](1); now=106; Config.Orbit.enabled=true; start(); local o=emitted[2][5]; assert(o.origin.x==10 and o.heading==90 and o.distance.max==3)")
+    def test_denial_reports_specific_reason(self):
+        for setting, reason in [('ace=false', 'ACE permission'), ('vehicle=4', 'vehicle'), ('alive=false', 'dead'), ("Config.AllowedJobs={'ambulance'}", 'current job')]:
+            with self.subTest(setting=setting):
+                self.setUp(); self.run_lua(setting+"; start(); assert(emitted[1][1]=='d-photomode:denied'); assert(string.find(emitted[1][3], '"+reason+"', 1, true))")
 if __name__ == '__main__': unittest.main()

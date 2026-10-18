@@ -4,22 +4,26 @@ local serial = 0
 
 local function allowed(src)
     local player = QBCore.Functions.GetPlayer(src)
-    if not player then return false end
-    if Config.RequireAce and not IsPlayerAceAllowed(src, Config.Ace) then return false end
+    if not player then return false, 'Your character is not ready yet.' end
+    if Config.RequireAce and not IsPlayerAceAllowed(src, Config.Ace) then
+        return false, 'Photo mode requires ACE permission: ' .. Config.Ace
+    end
     local jobs = Config.AllowedJobs
     if #jobs == 0 then return true end
     for _, job in ipairs(jobs) do
         if player.PlayerData.job and player.PlayerData.job.name == job then return true end
     end
-    return false
+    return false, 'Your current job cannot use photo mode.'
 end
 
 local function validPed(src)
     local ped = GetPlayerPed(src)
-    if ped == 0 or not DoesEntityExist(ped) or GetEntityHealth(ped) <= 0 then return end
+    if ped == 0 or not DoesEntityExist(ped) then return nil, 'Your player is not ready yet.' end
+    if GetEntityHealth(ped) <= 0 then return nil, 'Photo mode is unavailable while dead.' end
     local player = QBCore.Functions.GetPlayer(src)
     local meta = player and player.PlayerData.metadata or {}
-    if meta.isdead or meta.inlaststand or GetVehiclePedIsIn(ped, false) ~= 0 then return end
+    if meta.isdead or meta.inlaststand then return nil, 'Photo mode is unavailable while downed.' end
+    if GetVehiclePedIsIn(ped, false) ~= 0 then return nil, 'Leave your vehicle before using photo mode.' end
     return ped
 end
 
@@ -34,9 +38,10 @@ RegisterNetEvent('d-photomode:start', function()
     if attempts[src] and now - attempts[src] < Config.StartCooldownSeconds then return end
     attempts[src] = now
     if sessions[src] then return end
-    local ped = validPed(src)
-    if not allowed(src) or not ped then
-        TriggerClientEvent('d-photomode:denied', src)
+    local permitted, permissionReason = allowed(src)
+    local ped, stateReason = validPed(src)
+    if not permitted or not ped then
+        TriggerClientEvent('d-photomode:denied', src, permissionReason or stateReason)
         return
     end
     serial = serial + 1
