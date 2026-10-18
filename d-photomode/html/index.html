@@ -1,21 +1,50 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Photography</title><link rel="stylesheet" href="style.css"></head>
-<body><div id="frame" hidden><div id="bars" hidden></div><div id="grid" hidden><i></i><i></i><i></i><i></i></div>
-<main id="panel"><header><div><small>DINSOH DEVELOPMENT</small><h1>Photography</h1></div><button id="close" aria-label="Exit photography">×</button></header>
-<section id="orbit" hidden><div class="angles" aria-label="Camera angles"><button data-angle="0">Front</button><button data-angle="90">Left</button><button data-angle="180">Back</button><button data-angle="-90">Right</button></div>
-<label>Angle <output id="angleValue"></output><input id="angle" type="range" min="-180" max="180" step="1" value="0"></label>
-<label>Distance <output id="distanceValue"></output><input id="distance" type="range" step="0.05"></label>
-<label>Height <output id="heightValue"></output><input id="height" type="range" step="0.05"></label></section>
-<label>Focal view <output id="fovValue"></output><input id="fov" type="range" step="1"></label>
-<label>Roll <output id="tiltValue"></output><input id="tilt" type="range" step="1" value="0"></label>
-<label>Color grade<select id="filter"></select></label>
-<div class="row"><label><input id="showGrid" type="checkbox"> Thirds grid</label><label><input id="showBars" type="checkbox"> Cinema bars</label></div>
-<section id="depth" hidden><label class="row"><span>Depth of field</span><input id="dof" type="checkbox"></label><label>Focus distance <output id="focusValue"></output><input id="focus" type="range" min="1" max="50" step="0.5" value="5"></label></section>
-<footer><button id="hide">Hide overlay</button><button id="reset">Reset</button><p id="hint"></p><p id="error" role="status" hidden>Control unavailable. Press Escape to exit.</p></footer>
-</main></div><div id="photoViewer" hidden role="dialog" aria-modal="true" aria-labelledby="photoTitle">
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Photography</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<div id="frame" hidden>
+  <div id="bars" hidden></div>
+  <div id="grid" hidden><i></i><i></i><i></i><i></i></div>
+  <main id="panel">
+    <header><div><small>DINSOH DEVELOPMENT</small><h1>Photography</h1></div><button id="close" aria-label="Exit photography">×</button></header>
+    <div class="tabs" role="tablist" aria-label="Photo controls">
+      <button id="tabCamera" data-tab="camera" role="tab" aria-selected="true" aria-controls="cameraSettings">Camera</button>
+      <button id="tabLook" data-tab="look" role="tab" aria-selected="false" aria-controls="lookSettings">Look</button>
+      <button id="tabFrame" data-tab="frame" role="tab" aria-selected="false" aria-controls="frameSettings">Frame</button>
+    </div>
+    <section id="cameraSettings" role="tabpanel" aria-labelledby="tabCamera">
+      <section id="orbit" hidden>
+        <div class="angles" aria-label="Camera angles"><button data-angle="0">Front</button><button data-angle="90">Left</button><button data-angle="180">Back</button><button data-angle="-90">Right</button></div>
+        <label>Angle <output id="angleValue"></output><input id="angle" type="range" min="-180" max="180" step="1" value="0"></label>
+        <label>Distance <output id="distanceValue"></output><input id="distance" type="range" step="0.05"></label>
+        <label>Height <output id="heightValue"></output><input id="height" type="range" step="0.05"></label>
+      </section>
+      <label>Zoom · field of view <output id="fovValue"></output><input id="fov" type="range" step="0.1"></label>
+      <label>Roll <output id="tiltValue"></output><input id="tilt" type="range" step="1" value="0"></label>
+    </section>
+    <section id="lookSettings" role="tabpanel" aria-labelledby="tabLook" hidden>
+      <label>Filter<select id="filter"></select></label>
+      <label>Filter strength <output id="strengthValue"></output><input id="strength" type="range" min="0" max="1" step="0.05" value="0.65"></label>
+      <section id="depth" hidden>
+        <label class="row"><span>Depth of field</span><input id="dof" type="checkbox"></label>
+        <label>Focus distance <output id="focusValue"></output><input id="focus" type="range" min="1" max="50" step="0.5" value="5"></label>
+        <label>Blur strength <output id="dofStrengthValue"></output><input id="dofStrength" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+      </section>
+    </section>
+    <section id="frameSettings" role="tabpanel" aria-labelledby="tabFrame" hidden>
+      <label>Composition guide<select id="guide"><option value="thirds">Rule of thirds</option><option value="golden">Golden ratio</option><option value="center">Center cross</option></select></label>
+      <label>Letterbox ratio<select id="ratio"><option value="2.39">Cinema · 2.39:1</option><option value="1.85">Classic · 1.85:1</option><option value="1.7777778">Widescreen · 16:9</option><option value="1">Square · 1:1</option></select></label>
+      <div class="row"><label><input id="showGrid" type="checkbox"> Show guide</label><label><input id="showBars" type="checkbox"> Letterbox</label></div>
+    </section>
+    <footer><button id="hide">Hide overlay</button><button id="reset">Reset</button><p id="hint"></p><p id="error" role="status" hidden>Control unavailable. Press Escape to exit.</p></footer>
+  </main>
+</div>
+<div id="photoViewer" hidden role="dialog" aria-modal="true" aria-labelledby="photoTitle">
 <article class="polaroid"><div class="photo-top"><h2 id="photoTitle">Photograph</h2><button id="photoClose" aria-label="Close photograph">×</button></div>
 <div class="photo-image"><img id="photoImage" alt="Printed photograph"><p id="photoLoadError" hidden>This photograph could not be loaded.</p></div>
 <div class="photo-details"><p id="photoCaption"></p><p><span id="photoPhotographer"></span><time id="photoDate"></time></p></div>
 </article><div class="photo-tools"><button id="photoCopy">Copy Image Link</button><button id="photoDone">Close</button><p id="photoCopyStatus" role="status" aria-live="polite"></p>
 <label id="photoFallback" hidden>Image link<input id="photoLink" type="text" readonly spellcheck="false"></label><p id="photoPublicNotice">Anyone with this public link can view the photograph.</p></div></div>
-<script src="app.js"></script><script src="photo.js"></script></body></html>
+<script src="app.js"></script><script src="photo.js"></script>
+</body>
+</html>

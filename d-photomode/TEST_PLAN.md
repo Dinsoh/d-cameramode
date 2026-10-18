@@ -14,6 +14,10 @@ Owner reports initial anchored testing successful; individual rows below have no
 | Tight interior, wall, glass, nearby ped/vehicle, moving blocker | Offset shortens or session ends; no camera stuck beyond obstruction |
 | Orbit + teleport/death/vehicle/expiry/restart | Existing cleanup paths still work |
 | FINI-enabled orbit entry, presets, slider changes, repeated starts | Record actual deployed FINI outcome; stop on alert |
+| Entry/reset with wide/normal gameplay FOV | No initial zoom jump; Reset returns to entry view |
+| Focus distance/blur strength with DoF enabled | Blur changes without changing zoom |
+| All 13 filters, intensity 0/1, return to Natural | Local grade changes; owned effect clears; no stale grade |
+| Camera/Look/Frame tabs, all guides/ratios, hidden overlay | Compact UI; geometry aligned; H hides all |
 | FOV/roll limits, invalid input | Bounded values; no camera translation |
 | Grid/bars/reset and 720p/1080p/ultrawide | Correct alignment; controls fit; reset works |
 | Each grade, existing effect before entry | Local grade only; existing effect refuses entry |

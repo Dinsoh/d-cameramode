@@ -23,9 +23,12 @@ async function post(route, data = {}) {
 function values() {
   return { fov: Number($('fov').value), tilt: Number($('tilt').value),
     angle: Number($('angle').value), distance: Number($('distance').value), height: Number($('height').value),
-    filter: Number($('filter').value), dof: $('dof').checked, focus: Number($('focus').value) };
+    filter: Number($('filter').value), strength: Number($('strength').value), dofStrength: Number($('dofStrength').value), dof: $('dof').checked, focus: Number($('focus').value) };
 }
 function labels() {
+  $('strengthValue').textContent = `${Math.round(Number($('strength').value) * 100)}%`;
+  $('strength').disabled = $('filter').value === '1';
+  $('dofStrengthValue').textContent = `${Math.round(Number($('dofStrength').value) * 100)}%`;
   $('angleValue').textContent = `${$('angle').value}°`;
   $('distanceValue').textContent = `${Number($('distance').value).toFixed(2)} m`;
   $('heightValue').textContent = `${Number($('height').value).toFixed(2)} m`;
@@ -50,6 +53,8 @@ function reset() {
   $('fov').value = $('fov').dataset.default;
   $('tilt').value = 0; $('filter').value = 1;
   $('dof').checked = false; $('focus').value = 5;
+  $('strength').value = $('strength').dataset.default; $('dofStrength').value = 0.5;
+  $('guide').value = 'thirds'; $('ratio').value = '2.39'; composition();
   $('showGrid').checked = false; $('showBars').checked = false;
   $('grid').hidden = true; $('bars').hidden = true;
   labels();
@@ -64,6 +69,7 @@ window.addEventListener('message', ({ data }) => {
       for (const id of ['distance', 'height']) { $(id).min = orbit[id].min; $(id).max = orbit[id].max; }
     }
     $('frame').hidden = false; $('panel').hidden = false; $('error').hidden = true;
+    $('strength').dataset.default = data.strength ?? 0.65;
     $('fov').min = data.fov.min; $('fov').max = data.fov.max; $('fov').dataset.default = data.fov.default;
     $('tilt').min = -data.tilt; $('tilt').max = data.tilt;
     $('filter').replaceChildren(...data.filters.map((item, index) => {
@@ -72,14 +78,14 @@ window.addEventListener('message', ({ data }) => {
     }));
     $('depth').hidden = !data.dof;
     $('hint').textContent = `Escape · exit / ${hideKey} · hide or restore overlay. Use your usual screenshot key.`;
-    reset();
+    reset(); selectTab('camera');
   } else if (data.action === 'close') {
     active = false; clearTimeout(timer); timer = undefined; $('frame').hidden = true;
   } else if (data.action === 'hidden') {
     $('frame').hidden = data.hidden; // hide guides and bars too for a completely clean screenshot
   }
 });
-for (const id of ['fov', 'tilt', 'filter', 'dof', 'focus', 'angle', 'distance', 'height']) $(id).addEventListener('input', update);
+for (const id of ['fov', 'tilt', 'filter', 'dof', 'focus', 'angle', 'distance', 'height', 'strength', 'dofStrength']) $(id).addEventListener('input', update);
 $('showGrid').addEventListener('change', () => { $('grid').hidden = !$('showGrid').checked; });
 $('showBars').addEventListener('change', () => { $('bars').hidden = !$('showBars').checked; });
 $('close').addEventListener('click', () => post('close'));
@@ -93,3 +99,22 @@ window.addEventListener('keydown', event => {
 });
 
 for (const button of document.querySelectorAll('[data-angle]')) button.addEventListener('click', () => { $('angle').value = button.dataset.angle; update(); });
+
+function composition() {
+  $('grid').dataset.guide = $('guide').value;
+  const ratio = Number($('ratio').value);
+  const width = window.innerWidth, height = window.innerHeight;
+  const frameWidth = Math.min(width, height * ratio), frameHeight = Math.min(height, width / ratio);
+  $('bars').style.borderTopWidth = $('bars').style.borderBottomWidth = `${(height - frameHeight) / 2}px`;
+  $('bars').style.borderLeftWidth = $('bars').style.borderRightWidth = `${(width - frameWidth) / 2}px`;
+}
+for (const id of ['guide','ratio']) $(id).addEventListener('change', composition);
+window.addEventListener('resize', composition);
+function selectTab(name) {
+  for (const tab of document.querySelectorAll('[data-tab]')) {
+    const selected = tab.dataset.tab === name;
+    tab.setAttribute('aria-selected', String(selected));
+    $(`${tab.dataset.tab}Settings`).hidden = !selected;
+  }
+}
+for (const tab of document.querySelectorAll('[data-tab]')) tab.addEventListener('click', () => selectTab(tab.dataset.tab));
