@@ -32,7 +32,28 @@ class Client(unittest.TestCase):
         function GetGameTimer() return clock end
         function CreateCam() return 42 end
         function DoesCamExist() return true end
-        function SetCamCoord() end
+        function SetCamCoord(_,x,y,z) camera={x=x,y=y,z=z} end
+        local vm={}
+        function vector3(x,y,z) return setmetatable({x=x,y=y,z=z},vm) end
+        vm.__add=function(a,b) return vector3(a.x+b.x,a.y+b.y,a.z+b.z) end
+        vm.__sub=function(a,b) return vector3(a.x-b.x,a.y-b.y,a.z-b.z) end
+        vm.__mul=function(a,n) return vector3(a.x*n,a.y*n,a.z*n) end
+        vm.__len=function(a) return math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z) end
+        function StartExpensiveSynchronousShapeTestLosProbe(x,y,z,ex,ey,ez)
+            probeEnd=vector3(ex,ey,ez); return 1
+        end
+        function GetShapeTestResult()
+            if failedProbe then return 0,0,probeEnd end
+            if tooClose then return 2,1,vector3(0,0.1,0.7) end
+            if blocked then return 2,1,vector3(0,1,0.7) end
+            return 2,0,probeEnd
+        end
+        function enterOrbit()
+            commands.photomode()
+            events['d-photomode:grant'](1,180,{origin={x=0,y=0,z=0},heading=0,
+                distance=Config.Orbit.distance,height=Config.Orbit.height,
+                targetHeight=0.7,maxDistance=5})
+        end
         function SetCamRot() end
         function SetCamFov(_,n) fov=n end
         function SetCamUseShallowDofMode() end
@@ -70,4 +91,18 @@ class Client(unittest.TestCase):
         self.lua.execute("enter(); handlers.onResourceStop('d-photomode'); assert(destroyed and not focused)")
     def test_unsolicited_grant_does_not_enter(self):
         self.lua.execute("events['d-photomode:grant'](1,180); assert(not rendering and calls[1][1]=='d-photomode:finish')")
+    def test_orbit_presets_and_clamps(self):
+        self.lua.execute("enterOrbit(); assert(math.abs(camera.y-2)<0.001); callbacks.update({angle=180,distance=999,height=999},cb); assert(response.ok and math.abs(camera.y+3)<0.001 and math.abs(camera.z-2.2)<0.001)")
+    def test_collision_insets_camera(self):
+        self.lua.execute("blocked=true; enterOrbit(); assert(rendering and math.abs(camera.y-0.8)<0.001)")
+    def test_collision_rechecked_when_active(self):
+        self.lua.execute("enterOrbit(); blocked=true; tick(); assert(math.abs(camera.y-0.8)<0.001)")
+    def test_anchored_ignores_orbit_input(self):
+        self.lua.execute("enter(); callbacks.update({angle=180,distance=3},cb); assert(response.ok and message.orbit==false)")
+    def test_failed_probe_and_no_room_cleanup(self):
+        for condition in ['failedProbe=true', 'tooClose=true']:
+            with self.subTest(condition=condition):
+                self.setUp(); self.lua.execute(condition+'; enterOrbit(); assert(destroyed and not focused and not rendering)')
+    def test_bad_numbers_keep_valid_orbit(self):
+        self.lua.execute("enterOrbit(); callbacks.update({angle='nan',distance='bad',height=math.huge},cb); assert(response.ok and math.abs(camera.y-2)<0.001 and math.abs(camera.z-0.9)<0.001)")
 if __name__=='__main__': unittest.main()

@@ -2,6 +2,10 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Photography</title><link rel="stylesheet" href="style.css"></head>
 <body><div id="frame" hidden><div id="bars" hidden></div><div id="grid" hidden><i></i><i></i><i></i><i></i></div>
 <main id="panel"><header><div><small>DINSOH DEVELOPMENT</small><h1>Photography</h1></div><button id="close" aria-label="Exit photography">×</button></header>
+<section id="orbit" hidden><div class="angles" aria-label="Camera angles"><button data-angle="0">Front</button><button data-angle="90">Left</button><button data-angle="180">Back</button><button data-angle="-90">Right</button></div>
+<label>Angle <output id="angleValue"></output><input id="angle" type="range" min="-180" max="180" step="1" value="0"></label>
+<label>Distance <output id="distanceValue"></output><input id="distance" type="range" step="0.05"></label>
+<label>Height <output id="heightValue"></output><input id="height" type="range" step="0.05"></label></section>
 <label>Focal view <output id="fovValue"></output><input id="fov" type="range" step="1"></label>
 <label>Roll <output id="tiltValue"></output><input id="tilt" type="range" step="1" value="0"></label>
 <label>Color grade<select id="filter"></select></label>

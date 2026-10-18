@@ -42,7 +42,14 @@ RegisterNetEvent('d-photomode:start', function()
     serial = serial + 1
     local s = { id = serial, origin = GetEntityCoords(ped), expires = now + Config.SessionSeconds, ped = ped }
     sessions[src] = s
-    TriggerClientEvent('d-photomode:grant', src, s.id, Config.SessionSeconds)
+    local orbit
+    if Config.Orbit.enabled then
+        orbit = { origin = { x = s.origin.x, y = s.origin.y, z = s.origin.z },
+            heading = GetEntityHeading(ped), distance = Config.Orbit.distance,
+            height = Config.Orbit.height, targetHeight = Config.Orbit.targetHeight,
+            maxDistance = Config.MaxCameraDistance }
+    end
+    TriggerClientEvent('d-photomode:grant', src, s.id, Config.SessionSeconds, orbit)
 end)
 
 RegisterNetEvent('d-photomode:finish', function(id)

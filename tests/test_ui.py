@@ -17,6 +17,13 @@ with sync_playwright() as p:
     page.evaluate("window.postMessage({action:'hidden',hidden:true},'*')"); page.locator('#frame').wait_for(state='hidden')
     page.evaluate("window.postMessage({action:'hidden',hidden:false},'*')"); page.locator('#frame').wait_for(state='visible')
     page.keyboard.press('Escape'); assert page.evaluate("calls.some(c=>c[0].endsWith('/close'))")
+    page.evaluate("window.postMessage({action:'open',fov:{min:20,max:80,default:50},tilt:15,filters:[{label:'Natural'}],dof:false,hideKey:'H',orbit:{distance:{min:1,max:3,default:2},height:{min:-0.4,max:1.5,default:0.2}}},'*')")
+    page.locator('#orbit').wait_for(state='visible')
+    page.locator('[data-angle="180"]').click(); page.wait_for_timeout(150)
+    assert page.evaluate("calls.some(c=>c[0].endsWith('/update')&&c[1].angle===180)")
+    page.locator('#distance').fill('2.5'); page.locator('#distance').dispatch_event('input'); page.wait_for_timeout(150)
+    assert page.evaluate("calls.some(c=>c[1].distance===2.5)")
+    page.locator('#reset').click(); assert page.locator('#angle').input_value()=='0'; assert page.locator('#distance').input_value()=='2'
     page.set_viewport_size({'width':1280,'height':720})
     bounds=page.locator('#panel').bounding_box(); assert bounds['y']>=0 and bounds['y']+bounds['height']<=720
     page.screenshot(path='/workspace/photomode-ui.png',omit_background=True)

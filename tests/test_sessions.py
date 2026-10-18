@@ -25,7 +25,8 @@ class Sessions(unittest.TestCase):
         function DoesEntityExist() return online end
         function GetEntityHealth() return alive and 200 or 0 end
         function GetVehiclePedIsIn() return vehicle end
-        function GetEntityCoords() return setmetatable({},vec) end
+        function GetEntityCoords() return setmetatable({x=10,y=20,z=30},vec) end
+        function GetEntityHeading() return 90 end
         function Wait() coroutine.yield() end
         function CreateThread(fn) worker = coroutine.create(fn); assert(coroutine.resume(worker)) end
         function tick() assert(coroutine.resume(worker)) end
@@ -52,4 +53,6 @@ class Sessions(unittest.TestCase):
         for path in ROOT.glob('*.lua'):
             self.lua.execute('assert(load(...))', path.read_text())
 
+    def test_orbit_grant_is_server_controlled(self):
+        self.run_lua("start(); assert(emitted[1][5]==nil); events['d-photomode:finish'](1); now=106; Config.Orbit.enabled=true; start(); local o=emitted[2][5]; assert(o.origin.x==10 and o.heading==90 and o.distance.max==3)")
 if __name__ == '__main__': unittest.main()

@@ -1,6 +1,6 @@
 # Staging QA · FINI enabled
 
-All in-game rows are pending. Use a normal player account with explicit test ACE, deployed QB-Core and FINI enabled. Record artifact/resource versions, graphics mods, resolution, hardware, FINI policy/results, and client/server logs. Do not suppress or bypass detections. Stop testing sensitive features on an alert and seek supported FINI guidance.
+Owner reports initial anchored testing successful; individual rows below have no recorded detailed results. All new orbit rows are pending. Use a normal player account with explicit test ACE, deployed QB-Core and FINI enabled. Record artifact/resource versions, graphics mods, resolution, hardware, FINI policy/results, and client/server logs. Do not suppress or bypass detections. Stop testing sensitive features on an alert and seek supported FINI guidance.
 
 | Check | Expected |
 | --- | --- |
@@ -8,6 +8,12 @@ All in-game rows are pending. Use a normal player account with explicit test ACE
 | On-foot entry and Escape/F7/command exit | Single anchored camera; correct gameplay camera/radar/focus restored |
 | Rapid starts, repeated NUI input, old finish event | No duplicate session; current session survives stale finish |
 | Hide/restore and screenshot | Entire overlay hides; controls can be restored; no upload |
+| Orbit disabled / forged NUI orbit values | Anchored camera unchanged; orbit section absent |
+| Orbit enabled, normal test ACE, each preset | Front/left/back/right frame the player; no ped motion |
+| Angle, distance/height extremes, malformed numeric input | Session bounds enforced; reset restores default front |
+| Tight interior, wall, glass, nearby ped/vehicle, moving blocker | Offset shortens or session ends; no camera stuck beyond obstruction |
+| Orbit + teleport/death/vehicle/expiry/restart | Existing cleanup paths still work |
+| FINI-enabled orbit entry, presets, slider changes, repeated starts | Record actual deployed FINI outcome; stop on alert |
 | FOV/roll limits, invalid input | Bounded values; no camera translation |
 | Grid/bars/reset and 720p/1080p/ultrawide | Correct alignment; controls fit; reset works |
 | Each grade, existing effect before entry | Local grade only; existing effect refuses entry |
