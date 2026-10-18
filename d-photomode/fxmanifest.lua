@@ -1,0 +1,12 @@
+fx_version 'cerulean'
+game 'gta5'
+lua54 'yes'
+author 'Dinsoh Development'
+description 'Anchored RP photography'
+version '0.1.0'
+dependency 'qb-core'
+shared_script 'config.lua'
+client_script 'client.lua'
+server_script 'server.lua'
+ui_page 'html/index.html'
+files { 'html/index.html', 'html/style.css', 'html/app.js' }
