@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.1
+- Correct the default handheld model to `prop_pap_camera_01`; the previous nonexistent name prevented camera entry. Existing installations must update `Config.Prop.model` when retaining their config.
+
 ## 0.3.0
 - Camera-item entry with native prop/animation and server possession checks. Commands enforce the same item gate; public item use is the default, with optional ACE/job restrictions.
 - Actual screenshot-basic capture, overlay-ready acknowledgement and server-only FiveManage V3 upload with retention exemption and permanent URL validation.

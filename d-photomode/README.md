@@ -1,6 +1,6 @@
 # d-photomode · Dinsoh Development
 
-Version 0.3.0 — inventory-based instant photography for We The People RP and QB-Core. Use a camera, frame the game view, capture it, and receive a unique photograph you can view, copy, give away or keep in supported QS storage. The camera controls from 0.2.x remain available.
+Version 0.3.1 — inventory-based instant photography for We The People RP and QB-Core. Use a camera, frame the game view, capture it, and receive a unique photograph you can view, copy, give away or keep in supported QS storage. The camera controls from 0.2.x remain available.
 
 Implemented against the supplied QS customization source and FiveManage's official V3 API. **Cloud tests pass; a real FiveM capture, live FiveManage authentication/upload, prop placement, QS database reload and FINI behavior still require staging QA.** Resmon/concurrency timings have not been measured. See [TEST_PLAN.md](TEST_PLAN.md).
 
@@ -42,7 +42,9 @@ By default any eligible player **holding the camera** can use it (`RequireAce = 
 
 ## Taking and viewing photographs
 
-Use the camera inventory item. It equips `prop_pap_camera` and its native upper-body camera animation. Camera: angle/distance/height when orbit is enabled, zoom/FOV and roll. Look: 13 native filters, adjustable strength, optional DoF/focus/blur. Frame: thirds/golden/center guides, letterbox ratios and an optional caption.
+If upgrading with an existing config, set `Config.Prop.model = 'prop_pap_camera_01'` and restart `d-photomode` to fix the unavailable-prop error.
+
+Use the camera inventory item. It equips `prop_pap_camera_01` and its native upper-body camera animation. Camera: angle/distance/height when orbit is enabled, zoom/FOV and roll. Look: 13 native filters, adjustable strength, optional DoF/focus/blur. Frame: thirds/golden/center guides, letterbox ratios and an optional caption.
 
 Enter/Return or **Take photo** releases the cursor and hides all resource overlays. After two NUI frames the server requests an actual game-render screenshot. A shutter sound plays; a short flash happens only after the image has reached the server, so it is not baked into the photograph. A successful FiveManage upload triggers the printing effect and inventory delivery. Default film cost is one unit **per successfully printed photo**, not per failed attempt. Set `RequireFilm = false` to disable consumption.
 

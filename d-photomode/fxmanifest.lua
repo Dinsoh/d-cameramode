@@ -3,7 +3,7 @@ game 'gta5'
 lua54 'yes'
 author 'Dinsoh Development'
 description 'Inventory instant photography for QB-Core and QS-Inventory'
-version '0.3.0'
+version '0.3.1'
 dependencies { 'qb-core', 'qs-inventory', 'screenshot-basic' }
 shared_script 'config.lua'
 client_script 'client.lua'

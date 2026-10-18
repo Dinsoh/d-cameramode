@@ -7,7 +7,7 @@ Config = {
     CaptureCooldownSeconds = 10,
     PrintMilliseconds = 1800,
     CaptionLength = 80,
-    Prop = { model = 'prop_pap_camera', bone = 28422,
+    Prop = { model = 'prop_pap_camera_01', bone = 28422,
         offset = { x = 0.0, y = 0.0, z = 0.0 }, rotation = { x = 0.0, y = 0.0, z = 0.0 },
         dictionary = 'amb@world_human_paparazzi@male@base', animation = 'base' },
     Key = 'F7',

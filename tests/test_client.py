@@ -35,9 +35,9 @@ class Client(unittest.TestCase):
         function IsRadarHidden() return false end
         function GetGameTimer() return clock end
         function CreateCam() return 42 end
-        function GetHashKey() return 1 end
-        function IsModelInCdimage() return true end
-        function IsModelValid() return true end
+        function GetHashKey(model) return model end
+        function IsModelInCdimage(model) return model=='prop_pap_camera_01' end
+        function IsModelValid(model) return model=='prop_pap_camera_01' end
         function RequestModel() end
         function RequestAnimDict() end
         function HasModelLoaded() return true end
@@ -106,6 +106,8 @@ class Client(unittest.TestCase):
         ''')
         self.lua.execute((ROOT/'config.lua').read_text())
         self.lua.execute((ROOT/'client.lua').read_text())
+    def test_invalid_camera_model_releases_session(self):
+        self.lua.execute("Config.Prop.model='prop_pap_camera'; enter(); assert(not rendering and not focused); assert(message.action=='close'); assert(calls[#calls][1]=='d-photomode:finish')")
     def test_entry_and_idempotent_cleanup(self):
         self.lua.execute("enter(); assert(rendering and focused); commands.photomode_exit(); assert(not rendering and not focused and destroyed and radar); local n=#calls; commands.photomode_exit(); assert(#calls==n)")
     def test_interruptions_cleanup(self):
