@@ -84,7 +84,7 @@ class Client(unittest.TestCase):
         end
         function SetCamRot(_,pitch,roll,yaw) camPitch=pitch; camYaw=yaw end
         function SetCamFov(_,n) fov=n; lensWrites=(lensWrites or 0)+1 end
-        function SetCamUseShallowDofMode() end
+        function SetCamUseShallowDofMode() dofWrites=(dofWrites or 0)+1 end
         function SetCamNearDof(_,n) nearFocus=n end
         function SetCamFarDof(_,n) farFocus=n end
         function SetCamDofStrength(_,n) blur=n end
@@ -114,12 +114,24 @@ class Client(unittest.TestCase):
         elif not first_person: self.lua.execute('Config.Viewfinder.enabled=false')
         if not smoothing: self.lua.execute('Config.Motion.enabled=false')
         self.lua.execute((ROOT/'client.lua').read_text())
+    def test_one_lens_write_per_frame_during_zoom_and_orbit_updates(self):
+        self.setUp(True,True)
+        self.lua.execute("enterOrbit(); local writes=lensWrites; callbacks.update({mode='selfie',fov=20},cb); callbacks.update({height=3,strength=0.5},cb); assert(lensWrites==writes); tick(); assert(lensWrites==writes+1); for i=1,100 do local n=lensWrites; clock=clock+300; tick(); assert(lensWrites==n+1) end; assert(math.abs(fov-20)<0.001 and dofWrites==1)")
+    def test_partial_control_updates_keep_zoom_filter_and_depth(self):
+        self.setUp(True,True)
+        self.lua.execute("Config.EnableDof=true; enter(); callbacks.update({fov=30,filter=2,dof=true},cb); for i=1,90 do tick() end; callbacks.update({strength=0.2},cb); tick(); assert(math.abs(fov-30)<0.001 and graded and not cleared and gradeStrength==0.2); assert(dofWrites==2); local before=nearFocus; callbacks.update({tilt=5},cb); tick(); assert(nearFocus==before and dofWrites==2)")
+    def test_stale_ui_session_cannot_overwrite_lens(self):
+        self.setUp(True,True)
+        self.lua.execute("enter(); callbacks.update({session=99,fov=15},cb); assert(not response.ok); tick(); assert(fov==70); callbacks.capture({session=99},cb); assert(not response.ok)")
+    def test_live_lens_survives_quick_direction_reversal_and_external_mutation(self):
+        self.setUp(True,True)
+        self.lua.execute("enter(); callbacks.update({fov=20},cb); for i=1,20 do tick() end; callbacks.update({fov=90},cb); local previous=fov; for i=1,40 do tick(); assert(fov>=previous and fov<=90); previous=fov end; local actual=fov; fov=15; tick(); assert(fov>=actual and fov<=90)")
     def test_smooth_mouse_aim_and_zoom_converge_without_snapping(self):
         self.setUp(True, True)
         self.lua.execute("enter(); mouseX=1; scroll=241; tick(); assert(fov>68.5 and fov<70 and camYaw>22 and camYaw<30); mouseX=0; scroll=nil; local previous=fov; for i=1,90 do tick(); assert(fov<=previous); previous=fov end; assert(math.abs(fov-68.5)<0.001 and math.abs(camYaw-22)<0.001)")
-    def test_settled_eye_view_stops_writing_camera_settings(self):
+    def test_settled_eye_view_reasserts_lens_without_repeating_dof_setup(self):
         self.setUp(True,True)
-        self.lua.execute("enter(); callbacks.update({fov=30},cb); for i=1,120 do tick() end; local settled=lensWrites; for i=1,120 do tick() end; assert(lensWrites==settled)")
+        self.lua.execute("enter(); callbacks.update({fov=30},cb); for i=1,120 do tick() end; local settled=lensWrites; local setup=dofWrites; local stable=fov; for i=1,120 do tick(); assert(fov==stable) end; assert(lensWrites==settled+120 and dofWrites==setup)")
     def test_smoothing_is_frame_rate_independent(self):
         values=[]
         for rate in [30,60,144]:
@@ -132,7 +144,7 @@ class Client(unittest.TestCase):
         self.lua.execute("source=65535; enter(); callbacks.update({fov=20},cb); tick(); local framed=fov; assert(framed>20 and framed<70); callbacks.capture({},cb); assert(message.action=='framing' and message.fov==framed); events['d-photomode:prepareCapture'](1,9); for i=1,20 do tick() end; assert(fov==framed); events['d-photomode:captureResult'](1,9,true,'Printed'); for i=1,20 do tick() end; assert(fov==framed)")
     def test_orbit_smoothing_rechecks_collision_at_rendered_positions(self):
         self.setUp(True,True)
-        self.lua.execute("enterOrbit(); callbacks.update({mode='selfie'},cb); callbacks.update({distance=10,height=6,angle=30},cb); assert(math.abs(camera.y-2)<0.001); tick(); local d=math.sqrt(camera.x^2+camera.y^2); assert(d>2 and d<10); blocked=true; tick(); assert(math.sqrt(camera.x^2+camera.y^2)<1); blocked=false; for i=1,100 do tick() end; assert(math.abs(math.sqrt(camera.x^2+camera.y^2)-10)<0.001 and math.abs(camera.z-6.7)<0.001)")
+        self.lua.execute("enterOrbit(); callbacks.update({mode='selfie'},cb); tick(); callbacks.update({distance=10,height=6,angle=30},cb); assert(math.abs(camera.y-2)<0.001); tick(); local d=math.sqrt(camera.x^2+camera.y^2); assert(d>2 and d<10); blocked=true; tick(); assert(math.sqrt(camera.x^2+camera.y^2)<1); blocked=false; for i=1,100 do tick() end; assert(math.abs(math.sqrt(camera.x^2+camera.y^2)-10)<0.001 and math.abs(camera.z-6.7)<0.001)")
     def test_smooth_yaw_crosses_wrap_by_shortest_arc(self):
         self.setUp(True,True)
         self.lua.execute("enter(); mouseX=-40; tick(); local yaw=camYaw; assert(yaw>0 and yaw<30); mouseX=0; for i=1,90 do tick() end; assert(math.abs((camYaw+10+180)%360-180)<0.001)")
@@ -151,7 +163,7 @@ class Client(unittest.TestCase):
         self.lua.execute("enterOrbit(); assert(message.viewfinder and message.orbit and camera.y==0 and not focused)")
     def test_self_portrait_switch_pose_off_fine_controls_and_return(self):
         self.setUp(True)
-        self.lua.execute("enterOrbit(); assert(camera.y==0 and pose); commands.photomode_hide(); callbacks.update({mode='selfie',pose=false,angle=27.3,distance=5.61,height=2.87,fov=70},cb); assert(response.ok and not pose); local radius=math.sqrt(camera.x^2+camera.y^2); assert(math.abs(radius-5.61)<0.001 and math.abs(camera.z-3.57)<0.001); invisible={}; tick(); assert(not invisible[12] and invisible[55]); callbacks.update({mode='camera',pose=true,fov=70},cb); assert(pose and camera.y==0 and math.abs(camera.z-1.75)<0.001 and fov==70); invisible={}; tick(); assert(invisible[12]); commands.photomode_exit(); assert(not pose and propDeleted)")
+        self.lua.execute("enterOrbit(); assert(camera.y==0 and pose); commands.photomode_hide(); callbacks.update({mode='selfie',pose=false,angle=27.3,distance=5.61,height=2.87,fov=70},cb); tick(); assert(response.ok and not pose); local radius=math.sqrt(camera.x^2+camera.y^2); assert(math.abs(radius-5.61)<0.001 and math.abs(camera.z-3.57)<0.001); invisible={}; tick(); assert(not invisible[12] and invisible[55]); callbacks.update({mode='camera',pose=true,fov=70},cb); tick(); assert(pose and camera.y==0 and math.abs(camera.z-1.75)<0.001 and fov==70); invisible={}; tick(); assert(invisible[12]); commands.photomode_exit(); assert(not pose and propDeleted)")
     def test_self_portrait_requires_server_orbit_grant(self):
         self.setUp(True)
         self.lua.execute("enter(); callbacks.update({mode='selfie',pose=false},cb); tick(); assert(camera.y==0 and invisible[12] and not pose)")
@@ -170,13 +182,13 @@ class Client(unittest.TestCase):
             with self.subTest(condition=condition):
                 self.setUp(); self.lua.execute('enter(); '+condition+'; tick(); assert(destroyed and not focused and not rendering)')
     def test_bounded_input_and_grade_cleanup(self):
-        self.lua.execute("enter(); callbacks.update({fov=1000,filter=2},cb); assert(response.ok and fov==100 and graded); commands.photomode_exit(); assert(cleared)")
+        self.lua.execute("enter(); callbacks.update({fov=1000,filter=2},cb); tick(); assert(response.ok and fov==100 and graded); commands.photomode_exit(); assert(cleared)")
     def test_resource_stop_cleanup(self):
         self.lua.execute("enter(); handlers.onResourceStop('d-photomode'); assert(destroyed and not focused)")
     def test_unsolicited_grant_does_not_enter(self):
         self.lua.execute("events['d-photomode:grant'](1,180); assert(not rendering and calls[1][1]=='d-photomode:finish')")
     def test_orbit_presets_and_clamps(self):
-        self.lua.execute("enterOrbit(); assert(math.abs(camera.y-2)<0.001); callbacks.update({angle=180,distance=999,height=999},cb); assert(response.ok and math.abs(camera.y+10)<0.001 and math.abs(camera.z-6.7)<0.001)")
+        self.lua.execute("enterOrbit(); assert(math.abs(camera.y-2)<0.001); callbacks.update({angle=180,distance=999,height=999},cb); tick(); assert(response.ok and math.abs(camera.y+10)<0.001 and math.abs(camera.z-6.7)<0.001)")
     def test_collision_insets_camera(self):
         self.lua.execute("blocked=true; enterOrbit(); assert(rendering and math.abs(camera.y-0.8)<0.001)")
     def test_collision_rechecked_when_active(self):
@@ -202,7 +214,7 @@ class Client(unittest.TestCase):
     def test_wide_entry_fov_does_not_snap_to_configured_max(self):
         self.lua.execute("gameplayFov=100; enter(); assert(fov==100 and message.fov.max==100); callbacks.update({focus=2},cb); assert(fov==100)")
     def test_focus_and_blur_do_not_change_zoom(self):
-        self.lua.execute("Config.EnableDof=true; enter(); callbacks.update({dof=true,focus=2,dofStrength=99},cb); assert(response.ok and fov==70 and nearFocus==1 and farFocus==3 and blur==1)")
+        self.lua.execute("Config.EnableDof=true; enter(); callbacks.update({dof=true,focus=2,dofStrength=99},cb); tick(); assert(response.ok and fov==70 and nearFocus==1 and farFocus==3 and blur==1)")
     def test_filter_strength_is_clamped_without_reloading_grade(self):
         self.lua.execute("enter(); callbacks.update({filter=2,strength=99},cb); assert(gradeStrength==1 and gradeChanges==1); callbacks.update({filter=2,strength=-3},cb); assert(gradeStrength==0 and gradeChanges==1); callbacks.update({filter=1},cb); assert(cleared)")
     def test_capture_hides_focus_and_only_authorizes_ready_once(self):

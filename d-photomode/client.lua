@@ -99,20 +99,29 @@ local function orbitPosition(s)
     end
     local direction = target - position
     local horizontal = math.sqrt(direction.x * direction.x + direction.y * direction.y)
-    SetCamCoord(s.cam, position.x, position.y, position.z)
+    s.position = position
     frame.rotation = { x = math.deg(math.atan(direction.z, horizontal)),
         z = math.deg(math.atan(-direction.x, direction.y)) }
 end
 
-local function apply(s)
-    local frame = s.render or s
-    SetCamFov(s.cam, frame.fov)
+-- The active frame loop alone writes camera transforms after initialization.
+-- Reassert the exact rendered lens even when settled or capturing; do not let
+-- callbacks or repeated DoF setup briefly replace it with a target/old value.
+local function renderCamera(s)
+    local frame, position = s.render or s, s.position
+    SetCamCoord(s.cam, position.x, position.y, position.z)
     SetCamRot(s.cam, frame.rotation.x, frame.tilt, frame.rotation.z, 2)
-    SetCamUseShallowDofMode(s.cam, s.dof)
-    if s.dof then
+    SetCamFov(s.cam, frame.fov)
+    if s.appliedDof ~= s.dof then
+        SetCamUseShallowDofMode(s.cam, s.dof)
+        s.appliedDof = s.dof
+        if s.dof then s.appliedFocus, s.appliedBlur = nil, nil end
+    end
+    if s.dof and (s.appliedFocus ~= s.focus or s.appliedBlur ~= s.dofStrength) then
         SetCamNearDof(s.cam, math.max(0.1, s.focus - 1.0))
         SetCamFarDof(s.cam, s.focus + 1.0)
         SetCamDofStrength(s.cam, s.dofStrength)
+        s.appliedFocus, s.appliedBlur = s.focus, s.dofStrength
     end
 end
 
@@ -125,11 +134,10 @@ local function smoothFrame(s)
         return 1.0 - math.exp(-math.max(1.0, math.min(60.0, tonumber(value) or fallback)) * dt)
     end
     local aim, zoom, orbit = alpha(motion.response, 18.0), alpha(motion.zoomResponse, 12.0), alpha(motion.orbitResponse, 12.0)
-    local changed, orbitChanged = false, false
+    local orbitChanged = false
     local function ease(current, target, amount, angular)
         local delta = angular and ((target - current + 180.0) % 360.0 - 180.0) or target - current
         if delta == 0 then return current end
-        changed = true
         if math.abs(delta) < 0.001 then return target end
         local value = current + delta * amount
         return angular and ((value + 180.0) % 360.0 - 180.0) or value
@@ -147,7 +155,6 @@ local function smoothFrame(s)
         r.rotation.z = ease(r.rotation.z, s.rotation.z, aim, true)
     end
     if orbitChanged then orbitPosition(s); s.nextCollision = GetGameTimer() + 250 end
-    if changed then apply(s) end
 end
 
 local function freezeFraming(s)
@@ -191,7 +198,7 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
     -- slider range, so starting/resetting photo mode never introduces a zoom jump.
     local fovBounds = { min = math.min(Config.Fov.min, entryFov),
         max = math.max(Config.Fov.max, entryFov), default = entryFov }
-    local s = { id = id, ped = ped, origin = origin, orbit = orbit, orbitSettings = orbitSettings, eyePosition = position, selfie = orbit ~= nil, angle = 0.0,
+    local s = { id = id, ped = ped, origin = origin, position = position, orbit = orbit, orbitSettings = orbitSettings, eyePosition = position, selfie = orbit ~= nil, angle = 0.0,
         distance = orbitSettings and orbitSettings.distance.default, height = orbitSettings and orbitSettings.height.default, nextCollision = 0, rotation = GetGameplayCamRot(2),
         fov = entryFov, fovBounds = fovBounds, tilt = 0.0, dof = false, focus = 5.0,
         strength = Config.FilterStrength or 0.65, dofStrength = 0.5,
@@ -208,15 +215,14 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
         if not IsGameplayCamRendering() then error('Another camera is active') end
         s.cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', false)
         if s.cam == 0 then error('Camera creation failed') end
-        SetCamCoord(s.cam, position.x, position.y, position.z)
         orbitPosition(s)
-        apply(s)
+        renderCamera(s)
         SetCamActive(s.cam, true)
         RenderScriptCams(true, false, 0, true, false)
         SetNuiFocus(s.settings, s.settings)
         SetNuiFocusKeepInput(false)
         SendNUIMessage({ action = 'open', fov = fovBounds, strength = Config.FilterStrength or 0.65, tilt = Config.MaxTilt,
-            filters = Config.Filters, dof = Config.EnableDof, hideKey = Config.HideKey, captureKey = Config.CaptureKey, captionLength = Config.CaptionLength, viewfinder = firstPerson, orbit = orbitSettings or false })
+            filters = Config.Filters, dof = Config.EnableDof, hideKey = Config.HideKey, captureKey = Config.CaptureKey, captionLength = Config.CaptionLength, session = s.id, viewfinder = firstPerson, orbit = orbitSettings or false })
     end)
     if not ok then
         cleanup(s.endReason or 'Photo mode could not start')
@@ -235,7 +241,6 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
                     or GetGameTimer() >= s.expires then cleanup() break end
                 if s.orbit and not s.captureRequested and not s.captureId and GetGameTimer() >= s.nextCollision then
                     orbitPosition(s)
-                    apply(s)
                     s.nextCollision = GetGameTimer() + 250
                 end
                 -- Block movement/combat only while active. No entity freezing or teleportation.
@@ -262,11 +267,11 @@ RegisterNetEvent('d-photomode:grant', function(id, seconds, orbit)
                         local step = s.render and math.max(0.2, math.min(5.0, tonumber(motion.zoomStep) or 1.5)) * s.fov / 70.0 or 2.0
                         local zoom = IsDisabledControlJustPressed(0, 241) and -step or (IsDisabledControlJustPressed(0, 242) and step or 0)
                         s.fov = math.max(s.fovBounds.min, math.min(s.fovBounds.max, s.fov + zoom))
-                        if not s.render and (dx ~= 0 or dy ~= 0 or zoom ~= 0) then apply(s) end
                         if zoom ~= 0 then SendNUIMessage({action = 'lens', fov = s.fov}) end
                     end
                 end
                 if s.render and not s.captureRequested and not s.captureId then smoothFrame(s) end
+                renderCamera(s)
                 EnableControlAction(0, 249, true) -- voice
                 HideHudAndRadarThisFrame()
                 if s.dof then SetUseHiDof() end
@@ -321,7 +326,7 @@ RegisterNUICallback('close', function(_, cb) cleanup() cb({ ok = true }) end)
 RegisterNUICallback('hide', function(_, cb) hide() cb({ ok = true }) end)
 RegisterNUICallback('update', function(data, cb)
     local s = state
-    if not s or s.captureRequested or s.captureId or type(data) ~= 'table' then cb({ ok = false }) return end
+    if not s or s.captureRequested or s.captureId or type(data) ~= 'table' or (data.session and data.session ~= s.id) then cb({ ok = false }) return end
     local function number(value, lo, hi, fallback)
         local n = tonumber(value)
         if not n or n ~= n or n == math.huge or n == -math.huge then return fallback end
@@ -332,14 +337,15 @@ RegisterNUICallback('update', function(data, cb)
     s.focus = number(data.focus, 1.0, 50.0, s.focus)
     s.strength = number(data.strength, 0.0, 1.0, s.strength)
     s.dofStrength = number(data.dofStrength, 0.0, 1.0, s.dofStrength)
-    s.dof = Config.EnableDof and data.dof == true
+    if type(data.dof) == 'boolean' then s.dof = Config.EnableDof and data.dof end
     if s.orbitSettings then
         s.angle = number(data.angle, -180.0, 180.0, s.angle)
         s.distance = number(data.distance, s.orbitSettings.distance.min, s.orbitSettings.distance.max, s.distance)
         s.height = number(data.height, s.orbitSettings.height.min, s.orbitSettings.height.max, s.height)
     end
-    local index = number(data.filter, 1, #Config.Filters, 1)
-    local preset = Config.Filters[math.floor(index)]
+    local index = number(data.filter, 1, #Config.Filters, s.filterIndex or 1)
+    s.filterIndex = math.floor(index)
+    local preset = Config.Filters[s.filterIndex]
     local ok = pcall(function()
         if s.compact and (data.mode == 'camera' or (data.mode == 'selfie' and s.orbitSettings)) then
             local selfie = data.mode == 'selfie'
@@ -351,7 +357,7 @@ RegisterNUICallback('update', function(data, cb)
                     s.orbit = nil
                     s.rotation = { x = s.eyeRotation.x, z = s.eyeRotation.z }
                     if s.render then s.render.rotation = {x = s.rotation.x, z = s.rotation.z} end
-                    SetCamCoord(s.cam, s.eyePosition.x, s.eyePosition.y, s.eyePosition.z)
+                    s.position = s.eyePosition
                 end
                 s.selfie = selfie
             end
@@ -371,7 +377,6 @@ RegisterNUICallback('update', function(data, cb)
             s.modifier, s.filter = nil, false
         end
         orbitPosition(s)
-        apply(s)
     end)
     if not ok then cleanup(s.endReason or 'Photo controls could not be applied') end
     cb({ ok = ok })
@@ -400,7 +405,7 @@ RegisterNUICallback('closePhoto', function(_, cb) closePhoto() cb({ ok = true })
 RegisterNetEvent('d-photomode:closePhoto', function() if source == 65535 then closePhoto() end end)
 RegisterNUICallback('capture', function(data, cb)
     local s = state
-    if not s or s.captureRequested or s.captureId then cb({ok = false}) return end
+    if not s or s.captureRequested or s.captureId or (type(data) == 'table' and data.session and data.session ~= s.id) then cb({ok = false}) return end
     freezeFraming(s)
     s.captureRequested = true
     TriggerServerEvent('d-photomode:capture', s.id, type(data) == 'table' and data.caption or '')

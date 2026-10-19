@@ -85,3 +85,10 @@ Status: actual game captures, live FiveManage key/upload, deployed inventory SQL
 - Press shutter while zoom/aim/orbit is still easing: the uploaded photo must match the visible frame at press, with no easing during capture or resume toward the old target after capture. Verify failed uploads and retry too.
 - Orbit near walls/ceilings with rapid distance/angle/height changes: each interpolated position remains collision checked and within 13 m. Enable FINI for staging and record actual outcomes/performance.
 - Automated tests cover convergence, 30/60/144 FPS equivalent lens response, angular wrap, collision while easing, shutter freeze/UI synchronization and stopping settled eye-view camera writes. They do not measure native rendering latency or resmon.
+
+## 0.4.2 live zoom flash regression (in-game pending)
+
+- Repeatedly zoom in/out and rapidly reverse wheel direction in Camera and Self portrait. Repeat with Natural and other filters, DoF off/on, settings hidden/visible, and at low/high FPS. There should be no isolated old/fully-zoomed frames.
+- Zoom, change only filter strength/pose/roll, close H settings immediately, then scroll again. Unedited zoom/filter/DoF state must survive; no old full-form update should follow the native wheel change.
+- Take a photo mid-zoom and reopen the camera while browser requests are delayed. Capture preserves visible framing; callbacks from the previous session cannot display an error or update the new controls.
+- Active sessions now reassert their rendered transform every frame. Measure actual resmon/profiler cost on the target host; camera rendering still has no idle frame thread. Automated tests assert one transform write per frame and cached DoF, not native frame compositing or FINI behavior.

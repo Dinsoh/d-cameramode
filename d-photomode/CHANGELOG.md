@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+- Consolidate all native camera transform writes into initialization and one active-frame renderer. UI callbacks and orbit collision checks update state without writing an intermediate camera view.
+- Reassert the rendered FOV each active frame, including settled/captured views. Cache DoF setup instead of repeatedly reinitializing it while zooming.
+- Send only edited UI fields, preserve omitted filter/DoF values, and drain edits before returning from settings. Capture no longer sends a full slider-rounded settings snapshot.
+- Prevent delayed UI responses from affecting a reopened session; validate session IDs on control/capture requests.
+- Regression checks cover live zoom reversals, frame-write counts, unchanged DoF setup, native lens reassertion and stale browser responses. The reported in-game flash still requires live validation; no visual perfection claim is made.
+
 ## 0.4.1
 - Smooth mouse aim, wheel zoom, roll and self-portrait orbit with frame-rate-independent easing and shortest-path yaw/angle wrap. Smaller proportional wheel steps improve precision at longer zoom.
 - Freeze the actual rendered view at shutter time, cancel remaining easing and sync the controls to the photographed framing; no capture drift or post-capture zoom continuation.
